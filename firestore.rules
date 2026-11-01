@@ -1,0 +1,141 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // GLOBAL HELPERS
+    // -------------------------------------------------------------------------
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isEmailVerified() && (
+        request.auth.token.email == 'adffakff@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+
+    // -------------------------------------------------------------------------
+    // ENTITY VALIDATIONS
+    // -------------------------------------------------------------------------
+
+    function isValidUserProfile(data) {
+      return data.userId == request.auth.uid
+        && data.totalScore is int
+        && data.totalScore >= 0
+        && data.updatedAt == request.time
+        && data.keys().hasAll(['userId', 'totalScore', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'displayName', 'playerRank', 'totalScore', 'totalKills', 'highestWave', 'highestAccuracy', 'lastTheater', 'unlockedTheaters', 'customization', 'updatedAt', 'version', 'timestamp', 'saveSignature'])
+        && (data.displayName == null || (data.displayName is string && data.displayName.size() <= 100))
+        && (data.unlockedTheaters == null || (data.unlockedTheaters is list && data.unlockedTheaters.size() <= 20));
+    }
+
+    function isValidLeaderboardEntry(data) {
+      return data.userId == request.auth.uid
+        && data.score is int
+        && data.score >= 0
+        && data.timestamp == request.time
+        && data.keys().hasAll(['userId', 'score', 'timestamp'])
+        && data.keys().hasOnly(['userId', 'displayName', 'score', 'kills', 'theaterId', 'accuracy', 'timestamp'])
+        && (data.displayName == null || (data.displayName is string && data.displayName.size() <= 100));
+    }
+
+    function isValidSubscriber(data) {
+      return data.userId == request.auth.uid
+        && data.status in ['waiting', 'dropping', 'deployed']
+        && data.lastActive == request.time
+        && data.keys().hasAll(['userId', 'status', 'lastActive'])
+        && data.keys().hasOnly(['userId', 'displayName', 'status', 'lastActive']);
+    }
+
+    function isValidActiveMission(data) {
+      return data.keys().hasAll(['missionId', 'theaterId', 'isStarted'])
+        && data.keys().hasOnly(['missionId', 'theaterId', 'startTime', 'subscriberCount', 'isStarted'])
+        && data.missionId is string
+        && data.isStarted is bool;
+    }
+
+    // -------------------------------------------------------------------------
+    // DEFAULT DENY
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // COLLECTIONS
+    // -------------------------------------------------------------------------
+
+    // Users Collection: Private profiles
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) 
+        && isValidUserProfile(incoming());
+        
+      allow update: if (isOwner(userId) || isAdmin())
+        && isValidUserProfile(incoming())
+        && incoming().userId == existing().userId; // Immutable UID
+
+      allow delete: if isAdmin();
+    }
+
+    // Leaderboard Collection: Publicly viewable rankings
+    match /leaderboard/{entryId} {
+      allow get: if true;
+      allow list: if true; // Public can see the board
+      
+      allow create: if isSignedIn()
+        && isValidLeaderboardEntry(incoming())
+        && entryId.size() <= 128;
+
+      allow update: if (isOwner(existing().userId) || isAdmin())
+        && isValidLeaderboardEntry(incoming())
+        && incoming().userId == existing().userId;
+
+      allow delete: if isOwner(existing().userId) || isAdmin();
+    }
+
+    // Subscribers Collection: Publicly viewable but owner-writable
+    match /subscribers/{userId} {
+      allow get: if true;
+      allow list: if true;
+      
+      allow create: if isOwner(userId) && isValidSubscriber(incoming());
+      allow update: if (isOwner(userId) || isAdmin()) && isValidSubscriber(incoming());
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Active Missions Collection: Publicly viewable, admin-writable (or system)
+    match /activeMissions/{missionId} {
+      allow get: if true;
+      allow list: if true;
+      
+      allow create: if isSignedIn() && isValidActiveMission(incoming());
+      allow update: if isAdmin() && isValidActiveMission(incoming());
+      allow delete: if isAdmin();
+    }
+  }
+}

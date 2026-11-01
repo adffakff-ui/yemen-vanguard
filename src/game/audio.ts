@@ -672,6 +672,63 @@ class TacticalSoundSystem {
     osc2.start(t + 0.07);
     osc2.stop(t + 0.18);
   }
+
+  // High-altitude wind whistle for paratrooper descent
+  public playWindWhistle() {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    this.resume();
+    const t = this.ctx.currentTime;
+
+    const noise = this.ctx.createBufferSource();
+    const noiseBuffer = this.createNoiseBuffer(2.0);
+    if (noiseBuffer) {
+      noise.buffer = noiseBuffer;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(800, t);
+      filter.frequency.exponentialRampToValueAtTime(1200, t + 1.0);
+      filter.frequency.exponentialRampToValueAtTime(600, t + 2.0);
+      filter.Q.setValueAtTime(2.5, t);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.35, t + 0.5);
+      gain.gain.linearRampToValueAtTime(0, t + 2.0);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxGain);
+      noise.start(t);
+      noise.stop(t + 2.0);
+    }
+  }
+
+  // Parachute canopy deployment snap
+  public playParachuteDeploy() {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    this.resume();
+    const t = this.ctx.currentTime;
+
+    // Heavy fabric snap
+    const noise = this.ctx.createBufferSource();
+    const noiseBuffer = this.createNoiseBuffer(0.5);
+    if (noiseBuffer) {
+      noise.buffer = noiseBuffer;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(400, t);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.8, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxGain);
+      noise.start(t);
+      noise.stop(t + 0.5);
+    }
+  }
 }
 
 export const soundManager = new TacticalSoundSystem();

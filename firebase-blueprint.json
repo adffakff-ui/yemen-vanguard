@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "User Profile",
+      "description": "Stores tactical save data and player progress.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the player" },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "playerRank": { "type": "string", "maxLength": 100 },
+        "totalScore": { "type": "integer" },
+        "totalKills": { "type": "integer" },
+        "highestWave": { "type": "integer" },
+        "highestAccuracy": { "type": "number" },
+        "lastTheater": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "unlockedTheaters": { "type": "array", "items": { "type": "string" } },
+        "customization": {
+          "type": "object",
+          "properties": {
+            "camo": { "type": "string" },
+            "visorTint": { "type": "string" },
+            "sightOptic": { "type": "string" }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "version": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "saveSignature": { "type": "string" }
+      },
+      "required": ["userId", "totalScore", "updatedAt"]
+    },
+    "leaderboardEntry": {
+      "title": "Leaderboard Entry",
+      "description": "A single high score entry for the global leaderboard.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "score": { "type": "integer" },
+        "kills": { "type": "integer" },
+        "theaterId": { "type": "string" },
+        "accuracy": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "score", "timestamp"]
+    },
+    "subscriber": {
+      "title": "Mission Subscriber",
+      "description": "A player actively waiting or participating in a paratrooper drop.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "status": { "type": "string", "enum": ["waiting", "dropping", "deployed"] },
+        "lastActive": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "status", "lastActive"]
+    },
+    "activeMission": {
+      "title": "Active Mission",
+      "description": "A live mission state for paratrooping coordination.",
+      "type": "object",
+      "properties": {
+        "missionId": { "type": "string" },
+        "theaterId": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "subscriberCount": { "type": "integer" },
+        "isStarted": { "type": "boolean" }
+      },
+      "required": ["missionId", "theaterId", "isStarted"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "Private user profile and save data."
+    },
+    "/leaderboard/{entryId}": {
+      "schema": "leaderboardEntry",
+      "description": "Publicly readable leaderboard entries."
+    },
+    "/subscribers/{userId}": {
+      "schema": "subscriber",
+      "description": "Active mission participants."
+    },
+    "/activeMissions/{missionId}": {
+      "schema": "activeMission",
+      "description": "Live mission states."
+    }
+  }
+}

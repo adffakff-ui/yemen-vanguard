@@ -1,3 +1,5 @@
+import { db, auth, handleFirestoreError, OperationType } from '../services/firebase';
+import { doc, setDoc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { GameStats, WarTheaterId } from '../types/game.ts';
 import { LoadoutCustomization } from '../components/TitleScreen.tsx';
 
@@ -18,6 +20,87 @@ export interface TacticalSaveDossier {
 const STORAGE_KEY = 'yemen_vanguard_tactical_save_v1';
 
 export const saveManager = {
+  // Cloud Sync: Push local data to Firestore if logged in
+  async syncToCloud(data: TacticalSaveDossier) {
+    if (!auth.currentUser) return;
+    const path = `users/${auth.currentUser.uid}`;
+    try {
+      const sanitizedPayload = {
+        userId: auth.currentUser.uid,
+        displayName: auth.currentUser.displayName || 'Sabir Operative',
+        playerRank: data.playerRank || 'نقيب صاعقة (Captain Sabir)',
+        totalScore: Math.floor(Math.max(0, data.totalScore || 0)),
+        totalKills: Math.floor(Math.max(0, data.totalKills || 0)),
+        highestWave: Math.floor(Math.max(1, data.highestWave || 1)),
+        highestAccuracy: Number(data.highestAccuracy || 0),
+        lastTheater: String(data.lastTheater || 'sanaa'),
+        unlockedTheaters: Array.isArray(data.unlockedTheaters) ? data.unlockedTheaters : ['sanaa', 'mandeeb', 'hadramaut'],
+        customization: {
+          camo: data.customization?.camo || 'desert',
+          visorTint: data.customization?.visorTint || 'emerald',
+          sightOptic: data.customization?.sightOptic || 'holo',
+        },
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(doc(db, 'users', auth.currentUser.uid), sanitizedPayload, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  },
+
+  // Cloud Sync: Fetch data from Firestore
+  async fetchFromCloud(): Promise<TacticalSaveDossier | null> {
+    if (!auth.currentUser) return null;
+    const path = `users/${auth.currentUser.uid}`;
+    try {
+      const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      if (snap.exists()) {
+        const cloudData = snap.data();
+        const local = this.getSaveData();
+        const merged: TacticalSaveDossier = {
+          version: local.version || '1.4.0',
+          timestamp: Date.now(),
+          playerRank: cloudData.playerRank || local.playerRank || 'نقيب صاعقة (Captain Sabir)',
+          totalScore: typeof cloudData.totalScore === 'number' ? cloudData.totalScore : local.totalScore,
+          totalKills: typeof cloudData.totalKills === 'number' ? cloudData.totalKills : local.totalKills,
+          highestWave: typeof cloudData.highestWave === 'number' ? cloudData.highestWave : local.highestWave,
+          highestAccuracy: typeof cloudData.highestAccuracy === 'number' ? cloudData.highestAccuracy : local.highestAccuracy,
+          lastTheater: cloudData.lastTheater || local.lastTheater || 'sanaa',
+          unlockedTheaters: Array.isArray(cloudData.unlockedTheaters) ? cloudData.unlockedTheaters : local.unlockedTheaters,
+          customization: cloudData.customization || local.customization,
+          saveSignature: 'SABIR-YV-SECURE-ALPHA',
+        };
+        // Merge with local storage
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        return merged;
+      }
+      return null;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, path);
+      return null;
+    }
+  },
+
+  // Submit High Score to Leaderboard
+  async submitHighScore(stats: GameStats, displayName?: string) {
+    if (!auth.currentUser) return;
+    const path = 'leaderboard';
+    try {
+      await addDoc(collection(db, 'leaderboard'), {
+        userId: auth.currentUser.uid,
+        displayName: displayName || auth.currentUser.displayName || 'Anonymous Sabir',
+        score: Math.floor(Math.max(0, stats.score || 0)),
+        kills: Math.floor(Math.max(0, stats.kills || 0)),
+        theaterId: String(stats.theater || 'sanaa'),
+        accuracy: Number(stats.accuracy || 0),
+        timestamp: serverTimestamp(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  },
+
   // Read current saved profile from localStorage
   getSaveData(): TacticalSaveDossier {
     try {
@@ -53,6 +136,10 @@ export const saveManager = {
         timestamp: Date.now(),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      
+      // Auto-sync if logged in
+      this.syncToCloud(updated);
+      
       return updated;
     } catch {
       return this.getSaveData();
@@ -152,5 +239,26 @@ Verification Code: SABIR-OP-${Math.random().toString(36).substring(2, 9).toUpper
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  },
+
+  // Subscribe to mission
+  async updateSubscriber(status: 'waiting' | 'dropping' | 'deployed') {
+    if (!auth.currentUser) return;
+    const path = `subscribers/${auth.currentUser.uid}`;
+    try {
+      await setDoc(doc(db, 'subscribers', auth.currentUser.uid), {
+        userId: auth.currentUser.uid,
+        displayName: auth.currentUser.displayName || 'Anonymous Sabir',
+        status,
+        lastActive: serverTimestamp(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  },
+
+  // Get active subscriber count (simplified for demo)
+  async getSubscriberCount(): Promise<number> {
+    return Math.floor(Math.random() * 11) + 5;
   },
 };

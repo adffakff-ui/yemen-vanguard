@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { WarTheaterId, PlayerState, GameStats, WeaponType, WaveState, BossState, RadioTransmission, TacticalDroneState, TacticalDroneTarget } from '../types/game.ts';
 import { WAR_THEATERS, buildWarTheater, TheaterBuildResult, DestructiblePropObject } from './theater.ts';
-import { createCommandoModel, CommandoModel, createArmoredBossVehicle, ArmoredBossModel, createTacticalPickupMesh, createDroneModel, TacticalDroneModel, resetSharedTextures } from './models.ts';
+import { createCommandoModel, CommandoModel, createArmoredBossVehicle, ArmoredBossModel, createTacticalPickupMesh, createDroneModel, TacticalDroneModel, resetSharedTextures, createTransportPlaneModel, createParachuteModel } from './models.ts';
 import { EnemySystem } from './ai.ts';
 import { soundManager } from './audio.ts';
+import { DescentSystem } from './descent.ts';
 
 export interface TacticalDrop {
   id: string;
@@ -49,6 +50,8 @@ export interface GameEngineCallbacks {
   onWaveUpdate: (wave: WaveState) => void;
   onBossUpdate: (boss: BossState | null) => void;
   onRadioTransmission: (radio: RadioTransmission) => void;
+  onCameraUpdate: (yaw: number, pitch: number) => void;
+  onDescentUpdate: (status: { isActive: boolean; altitude: number; phase: string }) => void;
 }
 
 export class YemenCombatEngine {
@@ -67,6 +70,9 @@ export class YemenCombatEngine {
   private theaterData: TheaterBuildResult | null = null;
   private playerModel!: CommandoModel;
   private enemySystem!: EnemySystem;
+  private descentSystem!: DescentSystem;
+  private isDescentMode = false;
+  private subscriberCount = 8; // Default value, will be fetched or randomized
 
   // Multi-Wave System & Armored Boss State
   private currentWave = 1;
@@ -223,6 +229,13 @@ export class YemenCombatEngine {
     this.initScene();
     this.initInputs();
     this.initPooledAssets();
+    this.descentSystem = new DescentSystem(this.scene, this.playerModel, () => {
+      this.isDescentMode = false;
+      this.broadcastRadio(
+        'تم تأكيد الهبوط التكتيكي. طهّر المنطقة فوراً!',
+        'Landing confirmed. Secure the area immediately!'
+      );
+    });
     this.loadTheater('sanaa');
     this.startLoop();
   }
@@ -234,7 +247,7 @@ export class YemenCombatEngine {
       precision: 'highp',
       failIfMajorPerformanceCaveat: false,
       stencil: false,
-      alpha: false,
+      alpha: true,
       premultipliedAlpha: false,
       preserveDrawingBuffer: false,
     });
@@ -440,17 +453,13 @@ export class YemenCombatEngine {
       this.theaterData.propsGroup.traverse((obj) => YemenCombatEngine.disposeObject(obj));
       this.scene.remove(this.theaterData.propsGroup);
       
-      // Explicitly dispose ground texture if not using cached version (though we should always use cached)
-      if (this.theaterData.groundMesh.material instanceof THREE.MeshStandardMaterial) {
-        if (this.theaterData.groundMesh.material.map) {
-          // Note: map is disposed by disposeObject if we don't handle it carefully, 
-          // but we want to manage it via groundTextureCache.
-        }
+      if (this.theaterData.voxelTerrain) {
+        this.theaterData.voxelTerrain.dispose();
       }
     }
 
     // Sky & Fog
-    this.scene.background = new THREE.Color(config.skyColor);
+    this.scene.background = null;
     this.scene.fog = new THREE.FogExp2(config.fogColor, 0.012);
 
     // Dynamic 3-Point Lighting Rig
@@ -503,25 +512,7 @@ export class YemenCombatEngine {
 
     // Build Props, Architecture & Colliders
     const groundColorStr = '#' + config.groundColor.toString(16).padStart(6, '0');
-    if (!this.groundTextureCache[groundColorStr]) {
-      // Import createDesertTerrainTexture if needed? Wait, it's used in theater.ts.
-      // Actually, buildWarTheater handles it if I don't pass it.
-      // But if I want to cache it, I should create it here.
-    }
-    
-    // Actually, let's just let theater.ts create it and we'll grab it.
-    // No, better to manage it here.
-    
     this.theaterData = buildWarTheater(theaterId, this.scene, this.groundTextureCache[groundColorStr]);
-    
-    // If it was newly created, cache it
-    if (this.theaterData.groundMesh.material instanceof THREE.MeshStandardMaterial) {
-      const tex = this.theaterData.groundMesh.material.map;
-      if (tex && !this.groundTextureCache[groundColorStr]) {
-        tex.userData.isShared = true;
-        this.groundTextureCache[groundColorStr] = tex as THREE.CanvasTexture;
-      }
-    }
 
     this.playerPos.copy(this.theaterData.playerSpawnPoint);
     this.playerModel.root.position.copy(this.playerPos);
@@ -697,6 +688,14 @@ export class YemenCombatEngine {
     this.playerStats.weapons.sniper.currentAmmo = 6;
     this.playerStats.weapons.sniper.reserveAmmo = 24;
 
+    // Start Paratrooping phase
+    this.isDescentMode = true;
+    this.descentSystem.start(this.subscriberCount);
+    this.broadcastRadio(
+      'استعد للقفز! اضغط مسافة أو زر القفز للإنزال المظلي.',
+      'Prepare to jump! Press Space or the Jump button to paratroop.'
+    );
+
     this.requestPointerLock();
   }
 
@@ -762,6 +761,8 @@ export class YemenCombatEngine {
         this.triggerDroneLaunch();
       } else if (e.code === 'KeyQ' || e.code === 'KeyZ') {
         this.toggleAim();
+      } else if (e.code === 'Space' && this.isDescentMode) {
+        this.descentSystem.jump();
       }
     });
 
@@ -1095,6 +1096,9 @@ export class YemenCombatEngine {
           }
         }
       });
+      
+      // Voxel terrain destruction
+      this.theaterData.voxelTerrain.explode(pos, 3.5);
     }
 
     this.checkVictoryCondition();
@@ -1245,6 +1249,44 @@ export class YemenCombatEngine {
         Math.sin(this.titleOrbitAngle) * r
       );
       this.camera.lookAt(0, 3, 0);
+      this.callbacks.onCameraUpdate(this.titleOrbitAngle, 0.2);
+      return;
+    }
+
+    // Paratrooping Descent Mode
+    if (this.isDescentMode) {
+      const inputs = {
+        forward: (this.keysHeld['KeyW'] || this.keysHeld['ArrowUp'] || this.touchMoveVector.z < -0.3) ? 1 : 0,
+        side: (this.keysHeld['KeyA'] || this.keysHeld['ArrowLeft'] || this.touchMoveVector.x < -0.3) ? -1 : 
+              (this.keysHeld['KeyD'] || this.keysHeld['ArrowRight'] || this.touchMoveVector.x > 0.3) ? 1 : 0,
+        yaw: this.yaw,
+      };
+
+      if (this.keysJustPressed['Space']) {
+        this.descentSystem.jump();
+      }
+
+      this.descentSystem.update(dt, inputs);
+      
+      const descentStatus = this.descentSystem.getStatus();
+      this.callbacks.onDescentUpdate(descentStatus);
+      
+      // Dynamic camera for descent
+      if (descentStatus.phase === 'plane') {
+        const camPos = new THREE.Vector3();
+        this.playerModel.root.getWorldPosition(camPos);
+        this.camera.position.copy(camPos).add(new THREE.Vector3(1.2, 0.8, 2.5));
+        this.camera.lookAt(camPos.x, camPos.y, camPos.z - 5);
+      } else {
+        const camOffset = new THREE.Vector3(0, 4.5, 6.5).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.playerModel.root.rotation.y);
+        this.camera.position.copy(this.playerModel.root.position).add(camOffset);
+        this.camera.lookAt(this.playerModel.root.position.x, this.playerModel.root.position.y - 1.5, this.playerModel.root.position.z);
+        
+        // Sync playerPos for ground transition
+        this.playerPos.copy(this.playerModel.root.position);
+      }
+      
+      this.keysJustPressed = {}; // Clear justPressed at end of descent frame
       return;
     }
 
@@ -1437,6 +1479,9 @@ export class YemenCombatEngine {
     const lookTarget = this.playerPos.clone().add(new THREE.Vector3(0, 1.4, 0));
     this.camera.lookAt(lookTarget);
 
+    // Notify UI for parallax background updates
+    this.callbacks.onCameraUpdate(this.yaw, this.pitch);
+
     // Update Tactical Recon Drone Simulation
     if (this.droneCooldown > 0) {
       this.droneCooldown = Math.max(0, this.droneCooldown - dt);
@@ -1593,6 +1638,10 @@ export class YemenCombatEngine {
       }
 
       if (hit || p.life <= 0 || p.position.y < 0) {
+        if (!hit && p.position.y < 0.2 && this.theaterData) {
+          // Bullet hit ground: try to dent voxel terrain
+          this.theaterData.voxelTerrain.explode(p.position, 0.8);
+        }
         this.scene.remove(p.mesh);
         this.projectiles.splice(i, 1);
       }

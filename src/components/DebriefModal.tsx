@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { GameStats } from '../types/game.ts';
 import { WAR_THEATERS } from '../game/theater.ts';
-import { Award, Target, Clock, ShieldCheck, RotateCcw, Home, Skull, Download, CheckCircle2, Mail, MessageSquare, FileText } from 'lucide-react';
+import { Award, Target, Clock, ShieldCheck, RotateCcw, Home, Skull, Download, CheckCircle2, Mail, MessageSquare, FileText, GraduationCap } from 'lucide-react';
 import { saveManager } from '../game/saveManager.ts';
 import { GmailCommsModal } from './GmailCommsModal.tsx';
 import { GoogleChatModal } from './GoogleChatModal.tsx';
 import { GoogleDocsModal } from './GoogleDocsModal.tsx';
+import { GoogleClassroomModal } from './GoogleClassroomModal.tsx';
 
 interface DebriefModalProps {
   stats: GameStats;
@@ -24,6 +25,7 @@ export const DebriefModal: React.FC<DebriefModalProps> = ({
   const [showGmailModal, setShowGmailModal] = useState(false);
   const [showGoogleChatModal, setShowGoogleChatModal] = useState(false);
   const [showGoogleDocsModal, setShowGoogleDocsModal] = useState(false);
+  const [showGoogleClassroomModal, setShowGoogleClassroomModal] = useState(false);
   const theater = WAR_THEATERS.find((t) => t.id === stats.theater) || WAR_THEATERS[0];
 
   const handleDownloadReport = () => {
@@ -183,21 +185,29 @@ export const DebriefModal: React.FC<DebriefModalProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               onClick={() => setShowGoogleChatModal(true)}
-              className="py-2.5 px-3 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 hover:text-white font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_10px_rgba(20,184,166,0.2)]"
+              className="py-2.5 px-3 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 hover:text-white font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-[0_0_10px_rgba(20,184,166,0.2)]"
             >
-              <MessageSquare className="w-4 h-4 text-teal-400" />
+              <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
               <span>{lang === 'ar' ? 'Google Chat' : 'Google Chat'}</span>
             </button>
 
             <button
               onClick={() => setShowGoogleDocsModal(true)}
-              className="py-2.5 px-3 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-300 hover:text-white font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_10px_rgba(59,130,246,0.2)]"
+              className="py-2.5 px-3 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-300 hover:text-white font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-[0_0_10px_rgba(59,130,246,0.2)]"
             >
-              <FileText className="w-4 h-4 text-blue-400" />
+              <FileText className="w-3.5 h-3.5 text-blue-400" />
               <span>{lang === 'ar' ? 'Google Docs' : 'Google Docs'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowGoogleClassroomModal(true)}
+              className="py-2.5 px-3 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 hover:text-white font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+            >
+              <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{lang === 'ar' ? 'Classroom' : 'Classroom'}</span>
             </button>
           </div>
 
@@ -241,6 +251,14 @@ export const DebriefModal: React.FC<DebriefModalProps> = ({
       <GoogleDocsModal
         isOpen={showGoogleDocsModal}
         onClose={() => setShowGoogleDocsModal(false)}
+        lang={lang}
+        initialStats={stats}
+      />
+
+      {/* Google Classroom Tactical Center with Pre-filled Combat Stats */}
+      <GoogleClassroomModal
+        isOpen={showGoogleClassroomModal}
+        onClose={() => setShowGoogleClassroomModal(false)}
         lang={lang}
         initialStats={stats}
       />

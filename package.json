@@ -8,9 +8,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "apk:build": "bash scripts/build-apk.sh"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vis.gl/react-google-maps": "^1.10.2",
@@ -28,6 +31,8 @@
     "vite-plugin-pwa": "^2.0.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
+    "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@types/express": "^4.17.21",
     "@types/jszip": "^3.4.0",
     "@types/node": "^22.14.0",

@@ -11,6 +11,7 @@ import {
   createDestructibleCrateMesh,
 } from './models.ts';
 import { createDesertTerrainTexture } from './materials.ts';
+import { VoxelTerrain } from './voxelTerrain.ts';
 
 export interface DestructiblePropObject {
   id: string;
@@ -25,13 +26,13 @@ export interface DestructiblePropObject {
 }
 
 export interface TheaterBuildResult {
-  groundMesh: THREE.Mesh;
   colliders: { box: THREE.Box3; type: 'wall' | 'barrel' | 'cover'; entity?: any }[];
   barrelObjects: { group: THREE.Group; position: THREE.Vector3; health: number; isExploded: boolean }[];
   destructibleProps: DestructiblePropObject[];
   enemySpawnPoints: THREE.Vector3[];
   playerSpawnPoint: THREE.Vector3;
   propsGroup: THREE.Group;
+  voxelTerrain: VoxelTerrain;
 }
 
 export const WAR_THEATERS: WarTheaterConfig[] = [
@@ -95,6 +96,46 @@ export const WAR_THEATERS: WarTheaterConfig[] = [
     coordinates: { lat: "15°55'N", lng: "48°47'E" },
     threatLevel: 'CRITICAL',
   },
+  {
+    id: 'snow',
+    nameAr: 'قاعدة ذمار الثلجية',
+    nameEn: 'Dhamar Frozen Outpost',
+    regionAr: 'مرتفعات ذمار - القمم الجليدية',
+    regionEn: 'Dhamar Highlands, Frozen Peaks',
+    descriptionAr: 'قاعدة عسكرية استراتيجية فوق قمم الجبال المكسوة بالثلوج، حيث تنخفض الرؤية وتزداد الصعوبة تكتيكياً.',
+    descriptionEn: 'Strategic military base atop snow-capped peaks, where visibility is low and tactical complexity is high.',
+    skyColor: 0xd1d5db,
+    fogColor: 0xe5e7eb,
+    sunColor: 0xffffff,
+    groundColor: 0xf3f4f6,
+    accentColor: '#38bdf8',
+    objectiveAr: 'طهّر المحيط الثلجي من وحدات الاستطلاع ونخبة القناصة',
+    objectiveEn: 'Clear the frozen perimeter of recon units and elite snipers',
+    enemyCount: 12,
+    barrelCount: 6,
+    coordinates: { lat: "14°33'N", lng: "44°24'E" },
+    threatLevel: 'EXTREME',
+  },
+  {
+    id: 'forest',
+    nameAr: 'وادي ريمة الغابوي',
+    nameEn: 'Raymah Forest Gorge',
+    regionAr: 'محافظة ريمة - المدرجات الخضراء',
+    regionEn: 'Raymah Governorate, Green Terraces',
+    descriptionAr: 'منطقة غابات كثيفة وتضاريس خضراء شاهقة توفر غطاءً ممتازاً للعمليات الخاصة والكمائن.',
+    descriptionEn: 'Dense forested area with towering green terraces providing excellent cover for special ops and ambushes.',
+    skyColor: 0x064e3b,
+    fogColor: 0x065f46,
+    sunColor: 0xd9f99d,
+    groundColor: 0x14532d,
+    accentColor: '#22c55e',
+    objectiveAr: 'اخترق الغابة الكثيفة وحيّد معسكرات العدو المتخفية',
+    objectiveEn: 'Infiltrate the dense forest and neutralize hidden enemy camps',
+    enemyCount: 10,
+    barrelCount: 10,
+    coordinates: { lat: "14°37'N", lng: "43°42'E" },
+    threatLevel: 'CRITICAL',
+  },
 ];
 
 export function buildWarTheater(theaterId: WarTheaterId, scene: THREE.Scene, groundTexture?: THREE.CanvasTexture): TheaterBuildResult {
@@ -108,20 +149,18 @@ export function buildWarTheater(theaterId: WarTheaterId, scene: THREE.Scene, gro
   const enemySpawnPoints: THREE.Vector3[] = [];
   const playerSpawnPoint = new THREE.Vector3(0, 0, 32);
 
-  // Ground plane (140m x 140m)
-  const terrainTex = groundTexture || createDesertTerrainTexture(
-    '#' + config.groundColor.toString(16).padStart(6, '0')
-  );
-  const groundGeo = new THREE.PlaneGeometry(160, 160, 32, 32);
-  const groundMat = new THREE.MeshStandardMaterial({
-    map: terrainTex,
-    roughness: 0.95,
-    metalness: 0.05,
-  });
+  // Voxel Ground (Prototype for destruction)
+  const voxelTerrain = new VoxelTerrain(config.groundColor);
+  propsGroup.add(voxelTerrain.group);
 
+  // Hidden ground plane for raycasting and basic shadows if needed
+  const groundGeo = new THREE.PlaneGeometry(160, 160);
+  const groundMat = new THREE.MeshStandardMaterial({
+    visible: false, // Make it invisible but kept for physics/raycasting if needed
+  });
   const groundMesh = new THREE.Mesh(groundGeo, groundMat);
   groundMesh.rotation.x = -Math.PI / 2;
-  groundMesh.receiveShadow = true;
+  groundMesh.position.y = -0.1; 
   propsGroup.add(groundMesh);
 
   // Natural Perimeter: Cliffs, sandstone boulders, and perimeter defenses
@@ -446,7 +485,7 @@ export function buildWarTheater(theaterId: WarTheaterId, scene: THREE.Scene, gro
   });
 
   return {
-    groundMesh,
+    voxelTerrain,
     colliders,
     barrelObjects,
     destructibleProps,

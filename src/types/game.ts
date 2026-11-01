@@ -1,4 +1,4 @@
-export type WarTheaterId = 'sanaa' | 'mandeeb' | 'hadramaut';
+export type WarTheaterId = 'sanaa' | 'mandeeb' | 'hadramaut' | 'snow' | 'forest';
 
 export interface WarTheaterConfig {
   id: WarTheaterId;
@@ -122,7 +122,7 @@ export interface RadioTransmission {
   isWarning?: boolean;
 }
 
-export type GameStatus = 'title' | 'briefing' | 'playing' | 'paused' | 'victory' | 'gameover';
+export type GameStatus = 'title' | 'briefing' | 'descent' | 'playing' | 'paused' | 'victory' | 'gameover';
 
 export interface GameStats {
   score: number;

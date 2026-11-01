@@ -7,17 +7,42 @@ import { HUD } from './components/HUD.tsx';
 import { PauseModal } from './components/PauseModal.tsx';
 import { DebriefModal } from './components/DebriefModal.tsx';
 import { TouchControls } from './components/TouchControls.tsx';
+import { GameCanvas } from './components/GameCanvas.tsx';
+import { auth, signInWithGoogle, logout } from './services/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { saveManager } from './game/saveManager';
+import { assetLoader, AssetLoadProgress } from './game/assetLoader.ts';
+import { LoadingScreen } from './components/LoadingScreen.tsx';
 
 export default function App() {
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<YemenCombatEngine | null>(null);
 
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isPreloading, setIsPreloading] = useState(true);
+  const [preloadProgress, setPreloadProgress] = useState<AssetLoadProgress | null>(null);
+
+  useEffect(() => {
+    assetLoader.preloadAll((progress) => {
+      setPreloadProgress(progress);
+      if (progress.progress >= 100) {
+        setTimeout(() => setIsPreloading(false), 350);
+      }
+    });
+  }, []);
   const [status, setStatus] = useState<GameStatus>('title');
   const [selectedTheater, setSelectedTheater] = useState<WarTheaterId>('sanaa');
   const [lang, setLang] = useState<'ar' | 'en'>('ar');
   const [showTouchControls, setShowTouchControls] = useState(() => {
     if (typeof window === 'undefined') return false;
     return 'ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0) || window.innerWidth < 1024;
+  });
+
+  const [customization, setCustomization] = useState<LoadoutCustomization>({
+    camo: 'desert',
+    visorTint: 'emerald',
+    sightOptic: 'holo',
   });
 
   const [playerState, setPlayerState] = useState<PlayerState>({
@@ -94,6 +119,12 @@ export default function App() {
   const [bossState, setBossState] = useState<BossState | null>(null);
   const [radioTransmission, setRadioTransmission] = useState<RadioTransmission | null>(null);
   const radioTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [camOrientation, setCamOrientation] = useState({ yaw: 0, pitch: 0 });
+  const [descentStatus, setDescentStatus] = useState<{ isActive: boolean; altitude: number; phase: string }>({
+    isActive: false,
+    altitude: 0,
+    phase: 'plane',
+  });
 
   // Toggle Language & Sync HTML dir
   const toggleLanguage = useCallback(() => {
@@ -110,6 +141,24 @@ export default function App() {
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = lang;
   }, [lang]);
+
+  // Handle Firebase Auth State
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setUser(user);
+      setAuthLoading(false);
+      
+      if (user) {
+        // Fetch save from cloud and merge
+        const cloudSave = await saveManager.fetchFromCloud();
+        if (cloudSave) {
+          if (cloudSave.lastTheater) setSelectedTheater(cloudSave.lastTheater);
+          if (cloudSave.customization) setCustomization(cloudSave.customization);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Mount Three.js Engine once in isolated ref container
   useEffect(() => {
@@ -133,6 +182,7 @@ export default function App() {
       onGameOver: (stats) => {
         setDebriefStats(stats);
         setStatus('gameover');
+        saveManager.submitHighScore(stats);
         try {
           if (document.pointerLockElement) document.exitPointerLock?.();
         } catch {}
@@ -140,6 +190,7 @@ export default function App() {
       onVictory: (stats) => {
         setDebriefStats(stats);
         setStatus('victory');
+        saveManager.submitHighScore(stats);
         try {
           if (document.pointerLockElement) document.exitPointerLock?.();
         } catch {}
@@ -156,6 +207,17 @@ export default function App() {
         radioTimerRef.current = setTimeout(() => {
           setRadioTransmission(null);
         }, 4800);
+      },
+      onCameraUpdate: (yaw, pitch) => {
+        setCamOrientation({ yaw, pitch });
+      },
+      onDescentUpdate: (status) => {
+        setDescentStatus(status);
+        if (status.isActive) {
+          setStatus('descent');
+        } else if (status.phase === 'landing') {
+          setStatus('playing');
+        }
       },
     });
 
@@ -231,11 +293,6 @@ export default function App() {
     engineRef.current?.loadTheater(selectedTheater);
   };
 
-  const [customization, setCustomization] = useState<LoadoutCustomization>({
-    camo: 'desert',
-    visorTint: 'emerald',
-    sightOptic: 'holo',
-  });
 
   useEffect(() => {
     if (engineRef.current) {
@@ -252,8 +309,16 @@ export default function App() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-black select-none">
-      {/* Isolated Three.js WebGL Canvas Mount Container */}
-      <div ref={canvasContainerRef} className="absolute inset-0 w-full h-full z-0" />
+      {/* Asset Preloader Loading Screen */}
+      {isPreloading && <LoadingScreen progressData={preloadProgress} />}
+
+      {/* Dynamic Tactical Background with Panoramic HD Image & Parallax */}
+      <GameCanvas
+        canvasContainerRef={canvasContainerRef}
+        theaterId={selectedTheater}
+        yaw={camOrientation.yaw}
+        pitch={camOrientation.pitch}
+      />
 
       {/* Title Screen Overlay */}
       {status === 'title' && (
@@ -265,6 +330,10 @@ export default function App() {
           onToggleLang={toggleLanguage}
           customization={customization}
           onUpdateCustomization={handleUpdateCustomization}
+          user={user}
+          onLogin={signInWithGoogle}
+          onLogout={logout}
+          authLoading={authLoading}
         />
       )}
 
@@ -301,6 +370,7 @@ export default function App() {
           bossState={bossState}
           radioTransmission={radioTransmission}
           onTriggerDrone={() => engineRef.current?.triggerDroneLaunch()}
+          descentStatus={descentStatus}
         />
       )}
 

@@ -119,6 +119,36 @@ const TACTICAL_TARGETS: MapTarget[] = [
     descriptionEn: 'Tactical surveillance tower for maritime & overland recon.',
     color: '#8b5cf6', // Violet
   },
+  {
+    id: 'snow',
+    theaterId: 'snow',
+    nameAr: 'مسرح مرتفعات ذمار الجليدية',
+    nameEn: 'Dhamar Frozen Heights',
+    regionAr: 'محافظة ذمار - القمم الجليدية',
+    regionEn: 'Dhamar Governorate, Frozen Peaks',
+    lat: 14.545,
+    lng: 44.405,
+    threatLevel: 'EXTREME',
+    type: 'theater',
+    descriptionAr: 'قاعدة عسكرية فوق قمم الجبال المكسوة بالثلوج، حيث تنخفض الرؤية وتزداد الصعوبة تكتيكياً.',
+    descriptionEn: 'Military base atop snow-capped peaks, where visibility is low and tactical complexity is high.',
+    color: '#38bdf8', // Sky Blue
+  },
+  {
+    id: 'forest',
+    theaterId: 'forest',
+    nameAr: 'مسرح وادي ريمة الغابوي',
+    nameEn: 'Raymah Forest Gorge',
+    regionAr: 'محافظة ريمة - المدرجات الخضراء',
+    regionEn: 'Raymah Governorate, Green Terraces',
+    lat: 14.615,
+    lng: 43.705,
+    threatLevel: 'CRITICAL',
+    type: 'theater',
+    descriptionAr: 'منطقة غابات كثيفة وتضاريس خضراء شاهقة توفر غطاءً ممتازاً للعمليات الخاصة والكمائن.',
+    descriptionEn: 'Dense forested area with towering green terraces providing excellent cover for special ops.',
+    color: '#22c55e', // Green
+  },
 ];
 
 export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
@@ -128,14 +158,28 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
   onSelectTheater,
   onStartDeployment,
 }) => {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+  // Sanitize API key: trim whitespace and fix duplicated key strings if accidentally pasted twice
+  let rawApiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
+  if (rawApiKey.length > 39 && rawApiKey.startsWith('AIzaSy')) {
+    const firstHalf = rawApiKey.slice(0, 39);
+    const secondHalf = rawApiKey.slice(39, 78);
+    if (firstHalf === secondHalf) {
+      rawApiKey = firstHalf;
+    }
+  }
+  const apiKey = rawApiKey;
+
   const [mapType, setMapType] = useState<'hybrid' | 'satellite' | 'roadmap' | 'terrain'>('hybrid');
   const [selectedTarget, setSelectedTarget] = useState<MapTarget | null>(TACTICAL_TARGETS[0]);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
+  const [mapError, setMapError] = useState(false);
 
-  // Global listener for quota exceeded
+  // Global listener for quota exceeded or map load errors
   useEffect(() => {
-    const handleQuota = () => setQuotaExceeded(true);
+    const handleQuota = () => {
+      setQuotaExceeded(true);
+      setMapError(true);
+    };
     window.addEventListener('gmp-quota-exceeded', handleQuota);
     return () => window.removeEventListener('gmp-quota-exceeded', handleQuota);
   }, []);
@@ -320,8 +364,8 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
 
           {/* Right Area: Interactive Google Map */}
           <div className="col-span-1 md:col-span-2 relative h-full w-full min-h-[320px]">
-            {apiKey ? (
-              <APIProvider apiKey={apiKey}>
+            {apiKey && !mapError ? (
+              <APIProvider apiKey={apiKey} onError={() => setMapError(true)}>
                 <Map
                   style={{ width: '100%', height: '100%' }}
                   center={{
@@ -379,13 +423,58 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
                 </Map>
               </APIProvider>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3 bg-slate-950">
-                <Globe className="w-12 h-12 text-slate-600 animate-pulse" />
-                <p className="text-xs">
-                  {lang === 'ar'
-                    ? 'جاري تجهيز خريطة Google Maps التكتيكية...'
-                    : 'Initializing Google Maps Platform Satellite Radar...'}
-                </p>
+              <div className="h-full flex flex-col items-center justify-center p-6 text-center text-slate-300 space-y-4 bg-slate-950 relative overflow-hidden">
+                {/* Background Tactical Grid Pattern */}
+                <div
+                  className="absolute inset-0 opacity-15 pointer-events-none"
+                  style={{
+                    backgroundImage: `radial-gradient(circle at 50% 50%, #0ea5e9 1px, transparent 1px), linear-gradient(to right, #1e293b 1px, transparent 1px), linear-gradient(to bottom, #1e293b 1px, transparent 1px)`,
+                    backgroundSize: '30px 30px',
+                  }}
+                />
+
+                <div className="w-14 h-14 rounded-full bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 animate-pulse relative z-10">
+                  <Globe className="w-7 h-7" />
+                </div>
+
+                <div className="space-y-1 relative z-10 max-w-sm">
+                  <h3 className="text-sm font-bold text-sky-400 font-hud">
+                    {lang === 'ar' ? 'رادار الاستطلاع التكتيكي الميداني' : 'TACTICAL SATELLITE RADAR GRID'}
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {selectedTarget
+                      ? lang === 'ar'
+                        ? `إحداثيات الموقع: ${selectedTarget.lat.toFixed(4)}° شمالاً، ${selectedTarget.lng.toFixed(4)}° شرقاً`
+                        : `Target Coordinates: ${selectedTarget.lat.toFixed(4)}°N, ${selectedTarget.lng.toFixed(4)}°E`
+                      : lang === 'ar'
+                      ? 'تم تحديد المسارح والقواعد الميدانية على الخريطة'
+                      : 'Tactical target sectors identified'}
+                  </p>
+                </div>
+
+                {/* Selected Target Tactical Quick Card */}
+                {selectedTarget && (
+                  <div className="p-4 bg-slate-900/90 border border-sky-500/40 rounded-xl relative z-10 max-w-sm w-full text-right space-y-2 shadow-lg">
+                    <div className="flex items-center justify-between text-xs font-bold text-amber-400">
+                      <span>{lang === 'ar' ? selectedTarget.nameAr : selectedTarget.nameEn}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {selectedTarget.lat.toFixed(2)}°, {selectedTarget.lng.toFixed(2)}°
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300">{lang === 'ar' ? selectedTarget.descriptionAr : selectedTarget.descriptionEn}</p>
+                    {selectedTarget.theaterId && onStartDeployment && (
+                      <button
+                        onClick={() => {
+                          onStartDeployment(selectedTarget.theaterId!);
+                          onClose();
+                        }}
+                        className="w-full mt-2 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-hud font-bold text-xs rounded-lg transition-all"
+                      >
+                        {lang === 'ar' ? 'بدء الانتشار الميداني' : 'DEPLOY COMMANDO'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

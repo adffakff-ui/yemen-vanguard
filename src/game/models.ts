@@ -1465,7 +1465,172 @@ export function createDroneModel(): TacticalDroneModel {
     tickAnimation,
   };
 }
+/**
+ * Procedural C-130 Hercules style Transport Plane (14+ part composite)
+ */
+export interface TransportPlaneModel {
+  root: THREE.Group;
+  propellers: THREE.Mesh[];
+  cargoDoor: THREE.Group;
+  tickAnimation: (dt: number) => void;
+}
 
+export function createTransportPlaneModel(): TransportPlaneModel {
+  const root = new THREE.Group();
 
+  const fuselageMat = new THREE.MeshStandardMaterial({
+    color: 0x4b5563, // Tactical gray
+    roughness: 0.6,
+    metalness: 0.4,
+  });
 
+  const propellerMat = new THREE.MeshStandardMaterial({
+    color: 0x111827,
+    roughness: 0.8,
+    metalness: 0.2,
+    transparent: true,
+    opacity: 0.8,
+  });
 
+  // Main Fuselage (Length: 30m)
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(2, 2.2, 24, 12),
+    fuselageMat
+  );
+  body.rotation.x = Math.PI / 2;
+  root.add(body);
+
+  // Cockpit Nose
+  const nose = new THREE.Mesh(
+    new THREE.SphereGeometry(2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+    fuselageMat
+  );
+  nose.position.z = 12;
+  nose.rotation.x = Math.PI / 2;
+  root.add(nose);
+
+  // Tail Section
+  const tail = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.2, 0.5, 8, 12),
+    fuselageMat
+  );
+  tail.position.z = -16;
+  tail.rotation.x = Math.PI / 2;
+  root.add(tail);
+
+  // Horizontal Stabilizers
+  const hStab = new THREE.Mesh(
+    new THREE.BoxGeometry(8, 0.2, 2.5),
+    fuselageMat
+  );
+  hStab.position.set(0, 0, -18);
+  root.add(hStab);
+
+  // Vertical Fin
+  const vFin = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 4.5, 3.5),
+    fuselageMat
+  );
+  vFin.position.set(0, 2.2, -18);
+  root.add(vFin);
+
+  // Main Wings (Wingspan: 40m)
+  const wing = new THREE.Mesh(
+    new THREE.BoxGeometry(38, 0.4, 4.5),
+    fuselageMat
+  );
+  wing.position.set(0, 0.5, 2);
+  root.add(wing);
+
+  // 4 Engine Nacelles & Propellers
+  const propellers: THREE.Mesh[] = [];
+  const enginePos = [-12, -6, 6, 12];
+  
+  enginePos.forEach((x) => {
+    const nacelle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 0.7, 3, 8),
+      fuselageMat
+    );
+    nacelle.position.set(x, 0, 3.5);
+    nacelle.rotation.x = Math.PI / 2;
+    root.add(nacelle);
+
+    const prop = new THREE.Mesh(
+      new THREE.BoxGeometry(4.5, 0.2, 0.1),
+      propellerMat
+    );
+    prop.position.set(x, 0, 5);
+    root.add(prop);
+    propellers.push(prop);
+  });
+
+  // Cargo Ramp Door
+  const cargoDoor = new THREE.Group();
+  cargoDoor.position.set(0, -1.8, -12);
+  root.add(cargoDoor);
+
+  const doorMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(3, 0.2, 6),
+    fuselageMat
+  );
+  doorMesh.position.z = -3;
+  cargoDoor.add(doorMesh);
+
+  const tickAnimation = (dt: number) => {
+    propellers.forEach((p) => {
+      p.rotation.z += dt * 40;
+    });
+  };
+
+  return {
+    root,
+    propellers,
+    cargoDoor,
+    tickAnimation,
+  };
+}
+
+/**
+ * Procedural Tactical Parachute Canopy
+ */
+export function createParachuteModel(): THREE.Group {
+  const root = new THREE.Group();
+
+  const canopyMat = new THREE.MeshStandardMaterial({
+    color: 0x4b5563, // Gray / Olive
+    roughness: 0.8,
+    metalness: 0.1,
+    side: THREE.DoubleSide,
+  });
+
+  const cordMat = new THREE.MeshBasicMaterial({
+    color: 0xd1d5db,
+  });
+
+  // Main Canopy Dome (Semi-spherical)
+  const canopy = new THREE.Mesh(
+    new THREE.SphereGeometry(3.5, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+    canopyMat
+  );
+  canopy.position.y = 8;
+  canopy.rotation.x = Math.PI;
+  root.add(canopy);
+
+  // Suspension Cords
+  const cordCount = 12;
+  const radius = 3.4;
+  for (let i = 0; i < cordCount; i++) {
+    const angle = (i / cordCount) * Math.PI * 2;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+
+    const cordGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(x, 8, z),
+    ]);
+    const cord = new THREE.Line(cordGeo, cordMat);
+    root.add(cord);
+  }
+
+  return root;
+}

@@ -1,17 +1,12 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
-  getAuth,
   signInWithPopup,
   GoogleAuthProvider,
   onAuthStateChanged,
   User,
   signOut,
 } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
-
-// Reuse existing app if already initialized, or initialize new
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+import { auth } from './firebase.ts';
+export { auth };
 
 // All Workspace Gmail, Google Chat & Google Docs scopes requested & configured
 export const WORKSPACE_SCOPES: string[] = [
@@ -46,12 +41,28 @@ export const WORKSPACE_SCOPES: string[] = [
   'https://www.googleapis.com/auth/chat.users.sections',
   'https://www.googleapis.com/auth/chat.users.sections.readonly',
   'https://www.googleapis.com/auth/chat.users.spacesettings',
-  // Google Docs & Drive Scopes
+  // Google Docs & Drive & Picker Scopes
   'https://www.googleapis.com/auth/documents',
   'https://www.googleapis.com/auth/documents.readonly',
   'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/drive.metadata.readonly',
+  // Google Classroom Scopes
+  'https://www.googleapis.com/auth/classroom.courses',
+  'https://www.googleapis.com/auth/classroom.courses.readonly',
+  'https://www.googleapis.com/auth/classroom.coursework.me',
+  'https://www.googleapis.com/auth/classroom.coursework.students',
+  'https://www.googleapis.com/auth/classroom.announcements',
+  'https://www.googleapis.com/auth/classroom.announcements.readonly',
+  'https://www.googleapis.com/auth/classroom.rosters',
+  'https://www.googleapis.com/auth/classroom.rosters.readonly',
+  'https://www.googleapis.com/auth/classroom.profile.emails',
+  'https://www.googleapis.com/auth/classroom.profile.photos',
+  // Google Meet Scopes
+  'https://www.googleapis.com/auth/meetings.space.created',
+  'https://www.googleapis.com/auth/meetings.space.readonly',
+  'https://www.googleapis.com/auth/meetings.space.settings',
 ];
 
 export const GMAIL_SCOPES = WORKSPACE_SCOPES;

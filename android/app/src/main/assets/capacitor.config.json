@@ -1,0 +1,9 @@
+{
+	"appId": "com.tacticalgame.app",
+	"appName": "Tactical Strike",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	},
+	"android": {}
+}

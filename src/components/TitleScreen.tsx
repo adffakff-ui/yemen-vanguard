@@ -1,15 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { WarTheaterId } from '../types/game.ts';
 import { WAR_THEATERS } from '../game/theater.ts';
-import { Shield, Crosshair, Volume2, VolumeX, Globe, Sliders, Palette, Eye, Target, Mail, MapPin, MessageSquare, FileText } from 'lucide-react';
+import { Shield, Crosshair, Volume2, VolumeX, Globe, Sliders, Palette, Eye, Target, Mail, MapPin, MessageSquare, FileText, GraduationCap, FolderOpen, Video } from 'lucide-react';
 import { soundManager } from '../game/audio.ts';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
 import { DownloadModal } from './DownloadModal.tsx';
 import { GmailCommsModal } from './GmailCommsModal.tsx';
 import { GoogleChatModal } from './GoogleChatModal.tsx';
 import { GoogleDocsModal } from './GoogleDocsModal.tsx';
+import { GoogleClassroomModal } from './GoogleClassroomModal.tsx';
+import { GooglePickerModal } from './GooglePickerModal.tsx';
 import { TacticalMapModal } from './TacticalMapModal.tsx';
-import { TacticalSaveDossier } from '../game/saveManager.ts';
+import { GoogleMeetModal } from './GoogleMeetModal.tsx';
+import { MissionLobbyModal } from './MissionLobbyModal.tsx';
+import { auth, db, handleFirestoreError, OperationType } from '../services/firebase';
+import { User } from 'firebase/auth';
+import { LogIn, LogOut, User as UserIcon, Loader2 } from 'lucide-react';
 
 export interface LoadoutCustomization {
   camo: 'desert' | 'coastal' | 'canyon';
@@ -25,6 +31,10 @@ interface TitleScreenProps {
   onToggleLang: () => void;
   customization?: LoadoutCustomization;
   onUpdateCustomization?: (customization: LoadoutCustomization) => void;
+  user: User | null;
+  onLogin: () => Promise<any>;
+  onLogout: () => Promise<void>;
+  authLoading?: boolean;
 }
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({
@@ -35,8 +45,12 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   onToggleLang,
   customization = { camo: 'desert', visorTint: 'emerald', sightOptic: 'holo' },
   onUpdateCustomization,
+  user,
+  onLogin,
+  onLogout,
+  authLoading,
 }) => {
-  const [activeTab, setActiveTab] = useState<'theaters' | 'customizer' | 'audio'>('theaters');
+  const [activeTab, setActiveTab] = useState<'theaters' | 'customizer' | 'audio' | 'leaderboard'>('theaters');
   const [isMuted, setIsMuted] = useState(soundManager.getMuted());
   const [loadout, setLoadout] = useState<LoadoutCustomization>(customization);
   const [showDownloadCenter, setShowDownloadCenter] = useState(false);
@@ -44,6 +58,10 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   const [showMapsModal, setShowMapsModal] = useState(false);
   const [showGoogleChatModal, setShowGoogleChatModal] = useState(false);
   const [showGoogleDocsModal, setShowGoogleDocsModal] = useState(false);
+  const [showGoogleClassroomModal, setShowGoogleClassroomModal] = useState(false);
+  const [showGooglePickerModal, setShowGooglePickerModal] = useState(false);
+  const [showGoogleMeetModal, setShowGoogleMeetModal] = useState(false);
+  const [showLobbyModal, setShowLobbyModal] = useState(false);
 
   const handleToggleMute = () => {
     const muted = soundManager.toggleMute();
@@ -63,7 +81,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Enter' || e.code === 'Space') {
         e.preventDefault();
-        onStartGame();
+        setShowLobbyModal(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -130,12 +148,76 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           </button>
 
           <button
+            onClick={() => setShowGoogleClassroomModal(true)}
+            className="px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 rounded-lg text-xs font-semibold text-emerald-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+            title={lang === 'ar' ? 'فصول التدريب التكتيكي (Google Classroom)' : 'Google Classroom Training'}
+          >
+            <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">{lang === 'ar' ? 'فصول جوجل' : 'Classroom'}</span>
+          </button>
+
+          <button
+            onClick={() => setShowGooglePickerModal(true)}
+            className="px-3 py-1.5 bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/40 rounded-lg text-xs font-semibold text-indigo-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(99,102,241,0.2)]"
+            title={lang === 'ar' ? 'تحديد المستندات والملفات (Google Picker)' : 'Google Drive Picker'}
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">{lang === 'ar' ? 'محدد الملفات' : 'Picker'}</span>
+          </button>
+
+          <button
+            onClick={() => setShowGoogleMeetModal(true)}
+            className="px-3 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 rounded-lg text-xs font-semibold text-blue-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(59,130,246,0.2)]"
+            title={lang === 'ar' ? 'تنسيق العمليات عبر الفيديو (Google Meet)' : 'Tactical Video Briefing'}
+          >
+            <Video className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">{lang === 'ar' ? 'اجتماع Meet' : 'Meet'}</span>
+          </button>
+
+          <button
             onClick={onToggleLang}
             className="px-3.5 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 rounded-lg text-xs font-semibold text-slate-200 transition-colors flex items-center gap-2 cursor-pointer"
           >
             <Globe className="w-3.5 h-3.5 text-amber-400" />
             <span>{lang === 'ar' ? 'English' : 'عربي'}</span>
           </button>
+
+          {/* Firebase Auth Section */}
+          {authLoading ? (
+            <div className="p-2 bg-slate-900/90 border border-slate-700/80 rounded-lg">
+              <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+            </div>
+          ) : user ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+              {user.photoURL ? (
+                <img src={user.photoURL} alt="" className="w-6 h-6 rounded-full border border-emerald-500/40" />
+              ) : (
+                <UserIcon className="w-4 h-4 text-emerald-400" />
+              )}
+              <span className="text-[11px] font-bold text-emerald-300 hidden md:inline">
+                {user.displayName?.split(' ')[0]}
+              </span>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 rounded text-[10px] text-emerald-300 font-mono hidden lg:flex" title={lang === 'ar' ? 'سجلات الحفظ متصلة بالسحابة' : 'Cloud Save Active'}>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{lang === 'ar' ? 'سحابي' : 'SYNCED'}</span>
+              </div>
+              <button
+                onClick={onLogout}
+                className="p-1 hover:bg-red-500/20 rounded transition-colors text-slate-400 hover:text-red-400 cursor-pointer"
+                title={lang === 'ar' ? 'تسجيل الخروج' : 'Logout'}
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onLogin}
+              className="px-3.5 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 rounded-lg text-xs font-bold text-amber-300 hover:text-white transition-all flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'دخول السحابة' : 'Cloud Login'}</span>
+            </button>
+          )}
 
           <button
             onClick={handleToggleMute}
@@ -223,6 +305,18 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           >
             <Sliders className="w-4 h-4" />
             <span>{lang === 'ar' ? 'إعدادات الصوت' : 'Audio Settings'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('leaderboard')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold font-hud transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'leaderboard'
+                ? 'bg-amber-500 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            <span>{lang === 'ar' ? 'لوحة الشرف' : 'Global Leaderboard'}</span>
           </button>
         </div>
 
@@ -372,10 +466,15 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           </div>
         )}
 
+        {/* TAB 4: LEADERBOARD */}
+        {activeTab === 'leaderboard' && (
+          <Leaderboard lang={lang} />
+        )}
+
         {/* Primary Start CTA Button & Download Button */}
         <div className="pt-2 flex flex-wrap items-center gap-3 sm:gap-4">
           <button
-            onClick={onStartGame}
+            onClick={() => setShowLobbyModal(true)}
             className="px-8 sm:px-9 py-3.5 sm:py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold font-hud text-sm sm:text-base rounded-xl transition-all transform hover:scale-[1.02] shadow-[0_0_25px_rgba(245,158,11,0.4)] flex items-center gap-3 cursor-pointer"
           >
             <Crosshair className="w-5 h-5 text-slate-950" />
@@ -462,6 +561,123 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         onClose={() => setShowGoogleDocsModal(false)}
         lang={lang}
       />
+
+      {/* Tactical Google Classroom Center Modal */}
+      <GoogleClassroomModal
+        isOpen={showGoogleClassroomModal}
+        onClose={() => setShowGoogleClassroomModal(false)}
+        lang={lang}
+      />
+
+      {/* Tactical Google Picker Center Modal */}
+      <GooglePickerModal
+        isOpen={showGooglePickerModal}
+        onClose={() => setShowGooglePickerModal(false)}
+        lang={lang}
+      />
+
+      {/* Tactical Google Meet Coordination Modal */}
+      <GoogleMeetModal
+        isOpen={showGoogleMeetModal}
+        onClose={() => setShowGoogleMeetModal(false)}
+        lang={lang}
+      />
+
+      <MissionLobbyModal
+        isOpen={showLobbyModal}
+        onClose={() => setShowLobbyModal(false)}
+        onDeploy={(count) => {
+          setShowLobbyModal(false);
+          onStartGame();
+        }}
+        lang={lang}
+        theaterName={WAR_THEATERS.find(t => t.id === selectedTheater)?.nameAr || 'سناء'}
+      />
+    </div>
+  );
+};
+
+/**
+ * Leaderboard Component: Fetches and displays top scores from Firestore
+ */
+import { getDocs, collection, query, orderBy, limit } from 'firebase/firestore';
+import { Trophy, Star } from 'lucide-react';
+
+const Leaderboard: React.FC<{ lang: 'ar' | 'en' }> = ({ lang }) => {
+  const [entries, setEntries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchBoard = async () => {
+      try {
+        const q = query(collection(db, 'leaderboard'), orderBy('score', 'desc'), limit(10));
+        const snap = await getDocs(q);
+        setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error('Failed to fetch leaderboard:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchBoard();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl p-8 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl overflow-hidden">
+      <div className="bg-amber-500/10 border-b border-slate-800 p-3 flex items-center gap-2">
+        <Trophy className="w-4 h-4 text-amber-400" />
+        <span className="text-xs font-hud font-black text-amber-400 uppercase tracking-widest">
+          {lang === 'ar' ? 'قائمة شرف الأبطال - توب 10' : 'OPERATIONAL HALL OF FAME - TOP 10'}
+        </span>
+      </div>
+      
+      <div className="max-h-[300px] overflow-y-auto">
+        {entries.length === 0 ? (
+          <div className="p-8 text-center text-slate-500 text-xs font-arabic">
+            {lang === 'ar' ? 'لا يوجد سجلات أبطال حالياً. كن أول من يضع بصمته!' : 'No entries yet. Be the first to deploy!'}
+          </div>
+        ) : (
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="text-[10px] text-slate-500 uppercase font-hud border-b border-slate-800">
+                <th className="p-3 pl-5">#</th>
+                <th className="p-3">{lang === 'ar' ? 'البطل' : 'Operative'}</th>
+                <th className="p-3">{lang === 'ar' ? 'النتيجة' : 'Score'}</th>
+                <th className="p-3">{lang === 'ar' ? 'الأهداف' : 'Kills'}</th>
+                <th className="p-3 pr-5">{lang === 'ar' ? 'الدقة' : 'Acc'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry, idx) => (
+                <tr key={entry.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                  <td className="p-3 pl-5 text-xs font-mono text-slate-400">{idx + 1}</td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-100 font-arabic truncate max-w-[120px]">
+                        {entry.displayName}
+                      </span>
+                      {idx === 0 && <Star className="w-3 h-3 text-amber-400 fill-amber-400" />}
+                    </div>
+                  </td>
+                  <td className="p-3 text-xs font-hud font-bold text-amber-400">
+                    {entry.score.toLocaleString()}
+                  </td>
+                  <td className="p-3 text-xs text-slate-300">{entry.kills}</td>
+                  <td className="p-3 pr-5 text-xs text-emerald-400">{entry.accuracy}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 };

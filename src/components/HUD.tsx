@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { PlayerState, WarTheaterId, WaveState, BossState, RadioTransmission } from '../types/game.ts';
 import { WAR_THEATERS } from '../game/theater.ts';
-import { Shield, Heart, Zap, Crosshair, Bomb, Volume2, VolumeX, Globe, Smartphone, Radio, AlertTriangle, Eye, Target } from 'lucide-react';
+import { Shield, Heart, Zap, Crosshair, Bomb, Volume2, VolumeX, Globe, Smartphone, Radio, AlertTriangle, Eye, Target, Plane } from 'lucide-react';
 import { soundManager } from '../game/audio.ts';
 
 interface HUDProps {
@@ -21,6 +21,7 @@ interface HUDProps {
   bossState: BossState | null;
   radioTransmission: RadioTransmission | null;
   onTriggerDrone?: () => void;
+  descentStatus?: { isActive: boolean; altitude: number; phase: string };
 }
 
 export const HUD: React.FC<HUDProps> = ({
@@ -40,6 +41,7 @@ export const HUD: React.FC<HUDProps> = ({
   bossState,
   radioTransmission,
   onTriggerDrone,
+  descentStatus = { isActive: false, altitude: 0, phase: 'plane' },
 }) => {
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isMuted, setIsMuted] = React.useState(soundManager.getMuted());
@@ -635,6 +637,79 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         </div>
       </div>
+
+      {/* INTERACTIVE PARATROOPING DESCENT UI OVERLAY */}
+      {descentStatus.isActive && (
+        <div className="absolute inset-0 flex flex-col items-center justify-between p-8 sm:p-12 z-50 pointer-events-none animate-fade-in bg-slate-950/20 backdrop-blur-[2px]">
+          {/* Top: Altitude & Speed Gauge */}
+          <div className="w-full max-w-lg flex flex-col items-center gap-2">
+            <div className="bg-slate-950/90 border-2 border-amber-500/50 rounded-xl px-8 py-4 shadow-2xl flex flex-col items-center">
+              <div className="text-[10px] font-hud font-bold text-amber-500 uppercase tracking-[0.3em] mb-1">
+                {lang === 'ar' ? 'الارتفاع الميداني' : 'TACTICAL ALTITUDE'}
+              </div>
+              <div className="text-4xl sm:text-5xl font-black text-white font-hud tabular-nums flex items-baseline gap-2">
+                {Math.round(descentStatus.altitude)}
+                <span className="text-sm text-slate-400">M</span>
+              </div>
+            </div>
+            
+            <div className="flex gap-4">
+              <div className="bg-slate-950/80 border border-slate-700 px-4 py-1.5 rounded-lg text-[10px] font-hud font-bold text-slate-300">
+                {lang === 'ar' ? 'الحالة:' : 'PHASE:'} <span className="text-amber-400 uppercase">{descentStatus.phase}</span>
+              </div>
+              <div className="bg-slate-950/80 border border-slate-700 px-4 py-1.5 rounded-lg text-[10px] font-hud font-bold text-slate-300">
+                {lang === 'ar' ? 'الرياح:' : 'WIND:'} <span className="text-emerald-400">12 KM/H NW</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Center: Jump Instruction / Alignment Crosshair */}
+          <div className="flex flex-col items-center gap-6">
+            {descentStatus.phase === 'plane' ? (
+              <div className="flex flex-col items-center animate-pulse">
+                <div className="w-24 h-24 rounded-full border-4 border-amber-500 flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(245,158,11,0.4)]">
+                  <Plane className="w-10 h-10 text-amber-500" />
+                </div>
+                <div className="bg-amber-600 text-slate-950 px-6 py-2 rounded-full font-black font-hud text-lg uppercase tracking-wider">
+                  {lang === 'ar' ? 'اضغط مسافة للقفز' : 'PRESS SPACE TO JUMP'}
+                </div>
+              </div>
+            ) : (
+              <div className="relative w-64 h-64 flex items-center justify-center">
+                <div className="absolute inset-0 border-2 border-emerald-500/30 rounded-full" />
+                <div className="absolute w-full h-[1px] bg-emerald-500/20" />
+                <div className="absolute h-full w-[1px] bg-emerald-500/20" />
+                
+                {/* Dynamic Horizon / Attitude Indicator */}
+                <div className="w-48 h-[2px] bg-emerald-400/80 shadow-[0_0_10px_#10b981]" />
+                
+                <div className="absolute bottom-[-40px] text-center">
+                  <div className="text-[10px] font-hud font-bold text-emerald-400 uppercase tracking-widest mb-1">
+                    {lang === 'ar' ? 'التحكم في التوجيه' : 'STEERING ENGAGED'}
+                  </div>
+                  <div className="text-[9px] text-slate-400 italic">
+                    {lang === 'ar' ? '[WASD] للمناورة الجوية' : '[WASD] TO MANEUVER'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom: Warning / Proximity Alert */}
+          <div className="w-full max-w-sm">
+            {descentStatus.altitude < 150 && (
+              <div className="bg-red-600/90 border-2 border-white text-white p-4 rounded-xl shadow-2xl flex flex-col items-center animate-bounce">
+                <div className="text-xs font-black font-hud uppercase tracking-[0.2em]">
+                  {lang === 'ar' ? 'تنبيه: اقتراب من الأرض' : 'PROXIMITY ALERT: TERRAIN'}
+                </div>
+                <div className="text-[10px] font-bold mt-1 opacity-80 uppercase">
+                  {lang === 'ar' ? 'استعد للهبوط التكتيكي' : 'PREPARE FOR TACTICAL IMPACT'}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
