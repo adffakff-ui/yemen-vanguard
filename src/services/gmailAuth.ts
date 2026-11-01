@@ -13,8 +13,8 @@ import firebaseConfig from '../../firebase-applet-config.json';
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// All Workspace Gmail scopes requested & configured
-export const GMAIL_SCOPES: string[] = [
+// All Workspace Gmail, Google Chat & Google Docs scopes requested & configured
+export const WORKSPACE_SCOPES: string[] = [
   'https://mail.google.com/',
   'https://www.googleapis.com/auth/gmail.addons.current.action.compose',
   'https://www.googleapis.com/auth/gmail.addons.current.message.action',
@@ -29,11 +29,36 @@ export const GMAIL_SCOPES: string[] = [
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.settings.basic',
   'https://www.googleapis.com/auth/gmail.settings.sharing',
+  // Google Chat Scopes
+  'https://www.googleapis.com/auth/chat.spaces',
+  'https://www.googleapis.com/auth/chat.spaces.readonly',
+  'https://www.googleapis.com/auth/chat.spaces.create',
+  'https://www.googleapis.com/auth/chat.messages',
+  'https://www.googleapis.com/auth/chat.messages.create',
+  'https://www.googleapis.com/auth/chat.messages.readonly',
+  'https://www.googleapis.com/auth/chat.memberships',
+  'https://www.googleapis.com/auth/chat.memberships.readonly',
+  'https://www.googleapis.com/auth/chat.delete',
+  'https://www.googleapis.com/auth/chat.customemojis',
+  'https://www.googleapis.com/auth/chat.customemojis.readonly',
+  'https://www.googleapis.com/auth/chat.users.readstate',
+  'https://www.googleapis.com/auth/chat.users.readstate.readonly',
+  'https://www.googleapis.com/auth/chat.users.sections',
+  'https://www.googleapis.com/auth/chat.users.sections.readonly',
+  'https://www.googleapis.com/auth/chat.users.spacesettings',
+  // Google Docs & Drive Scopes
+  'https://www.googleapis.com/auth/documents',
+  'https://www.googleapis.com/auth/documents.readonly',
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.readonly',
 ];
 
+export const GMAIL_SCOPES = WORKSPACE_SCOPES;
+
 const provider = new GoogleAuthProvider();
-// Add all configured Workspace Gmail scopes
-GMAIL_SCOPES.forEach((scope) => {
+// Add all configured Workspace scopes
+WORKSPACE_SCOPES.forEach((scope) => {
   provider.addScope(scope);
 });
 provider.setCustomParameters({
@@ -56,7 +81,6 @@ export const initAuth = (
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
-        // If user is logged in to Firebase but token is not in memory, we need re-authentication or token retrieval
         cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
       }
@@ -82,7 +106,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     cachedAccessToken = credential.accessToken;
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
-    console.error('Gmail Sign In Error:', error);
+    console.error('Workspace Sign In Error:', error);
     throw error;
   } finally {
     isSigningIn = false;

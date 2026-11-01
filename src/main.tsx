@@ -17,14 +17,17 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
-window.addEventListener('error', (event) => {
-  const msg = String(event.message || event.error?.message || '');
-  if (
-    msg.includes('If you see this error we have a bug') ||
-    msg.includes('report this bug to chromium')
-  ) {
-    event.preventDefault();
+// Register early global Google Maps quota listener and console interceptor
+(window as any).gm_authFailure = () => {
+  window.dispatchEvent(new CustomEvent('gmp-quota-exceeded'));
+};
+const origConsoleError = console.error;
+console.error = (...args: unknown[]) => {
+  origConsoleError.apply(console, args);
+  const msg = args.map((a) => String(a)).join(' ');
+  if (msg.includes('OverQuotaMapError') || msg.includes('QuotaExceededError')) {
+    window.dispatchEvent(new CustomEvent('gmp-quota-exceeded'));
   }
-});
+};
 
 createRoot(document.getElementById('root')!).render(<App />);

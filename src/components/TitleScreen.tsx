@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { WarTheaterId } from '../types/game.ts';
 import { WAR_THEATERS } from '../game/theater.ts';
-import { Shield, Crosshair, Volume2, VolumeX, Globe, Sliders, Palette, Eye, Target, Mail } from 'lucide-react';
+import { Shield, Crosshair, Volume2, VolumeX, Globe, Sliders, Palette, Eye, Target, Mail, MapPin, MessageSquare, FileText } from 'lucide-react';
 import { soundManager } from '../game/audio.ts';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
 import { DownloadModal } from './DownloadModal.tsx';
 import { GmailCommsModal } from './GmailCommsModal.tsx';
+import { GoogleChatModal } from './GoogleChatModal.tsx';
+import { GoogleDocsModal } from './GoogleDocsModal.tsx';
+import { TacticalMapModal } from './TacticalMapModal.tsx';
 import { TacticalSaveDossier } from '../game/saveManager.ts';
 
 export interface LoadoutCustomization {
@@ -38,6 +41,9 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   const [loadout, setLoadout] = useState<LoadoutCustomization>(customization);
   const [showDownloadCenter, setShowDownloadCenter] = useState(false);
   const [showGmailModal, setShowGmailModal] = useState(false);
+  const [showMapsModal, setShowMapsModal] = useState(false);
+  const [showGoogleChatModal, setShowGoogleChatModal] = useState(false);
+  const [showGoogleDocsModal, setShowGoogleDocsModal] = useState(false);
 
   const handleToggleMute = () => {
     const muted = soundManager.toggleMute();
@@ -94,6 +100,33 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           >
             <Mail className="w-3.5 h-3.5 text-red-400" />
             <span className="hidden sm:inline">{lang === 'ar' ? 'بريد Gmail' : 'Gmail Comms'}</span>
+          </button>
+
+          <button
+            onClick={() => setShowMapsModal(true)}
+            className="px-3 py-1.5 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 rounded-lg text-xs font-semibold text-sky-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(14,165,233,0.2)]"
+            title={lang === 'ar' ? 'خريطة القمر الصناعي التكتيكية (Google Maps)' : 'Tactical Satellite Map'}
+          >
+            <MapPin className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline">{lang === 'ar' ? 'خرائط جوجل' : 'Google Maps'}</span>
+          </button>
+
+          <button
+            onClick={() => setShowGoogleChatModal(true)}
+            className="px-3 py-1.5 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 rounded-lg text-xs font-semibold text-teal-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(20,184,166,0.2)]"
+            title={lang === 'ar' ? 'غرف المحادثات التكتيكية (Google Chat)' : 'Google Chat Spaces'}
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
+            <span className="hidden sm:inline">{lang === 'ar' ? 'محادثات جوجل' : 'Google Chat'}</span>
+          </button>
+
+          <button
+            onClick={() => setShowGoogleDocsModal(true)}
+            className="px-3 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 rounded-lg text-xs font-semibold text-blue-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(59,130,246,0.2)]"
+            title={lang === 'ar' ? 'تقارير ومستندات القيادة (Google Docs)' : 'Google Docs Center'}
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">{lang === 'ar' ? 'مستندات جوجل' : 'Google Docs'}</span>
           </button>
 
           <button
@@ -401,6 +434,32 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
       <GmailCommsModal
         isOpen={showGmailModal}
         onClose={() => setShowGmailModal(false)}
+        lang={lang}
+      />
+
+      {/* Tactical Google Maps Platform Recon Modal */}
+      <TacticalMapModal
+        isOpen={showMapsModal}
+        onClose={() => setShowMapsModal(false)}
+        lang={lang}
+        onSelectTheater={(id) => onSelectTheater(id)}
+        onStartDeployment={(id) => {
+          onSelectTheater(id);
+          onStartGame();
+        }}
+      />
+
+      {/* Tactical Google Chat Operational Spaces Modal */}
+      <GoogleChatModal
+        isOpen={showGoogleChatModal}
+        onClose={() => setShowGoogleChatModal(false)}
+        lang={lang}
+      />
+
+      {/* Tactical Google Docs Center Modal */}
+      <GoogleDocsModal
+        isOpen={showGoogleDocsModal}
+        onClose={() => setShowGoogleDocsModal(false)}
         lang={lang}
       />
     </div>

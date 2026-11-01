@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { GameStats } from '../types/game.ts';
 import { WAR_THEATERS } from '../game/theater.ts';
-import { Award, Target, Clock, ShieldCheck, RotateCcw, Home, Skull, Download, CheckCircle2, Mail } from 'lucide-react';
+import { Award, Target, Clock, ShieldCheck, RotateCcw, Home, Skull, Download, CheckCircle2, Mail, MessageSquare, FileText } from 'lucide-react';
 import { saveManager } from '../game/saveManager.ts';
 import { GmailCommsModal } from './GmailCommsModal.tsx';
+import { GoogleChatModal } from './GoogleChatModal.tsx';
+import { GoogleDocsModal } from './GoogleDocsModal.tsx';
 
 interface DebriefModalProps {
   stats: GameStats;
@@ -20,6 +22,8 @@ export const DebriefModal: React.FC<DebriefModalProps> = ({
 }) => {
   const [downloaded, setDownloaded] = useState(false);
   const [showGmailModal, setShowGmailModal] = useState(false);
+  const [showGoogleChatModal, setShowGoogleChatModal] = useState(false);
+  const [showGoogleDocsModal, setShowGoogleDocsModal] = useState(false);
   const theater = WAR_THEATERS.find((t) => t.id === stats.theater) || WAR_THEATERS[0];
 
   const handleDownloadReport = () => {
@@ -175,7 +179,25 @@ export const DebriefModal: React.FC<DebriefModalProps> = ({
               className="py-2.5 px-3 bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-300 hover:text-white font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_10px_rgba(239,68,68,0.2)]"
             >
               <Mail className="w-4 h-4 text-red-400" />
-              <span>{lang === 'ar' ? 'إرسال التقرير عبر Gmail' : 'DISPATCH VIA GMAIL'}</span>
+              <span>{lang === 'ar' ? 'Gmail' : 'Gmail'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              onClick={() => setShowGoogleChatModal(true)}
+              className="py-2.5 px-3 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 hover:text-white font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_10px_rgba(20,184,166,0.2)]"
+            >
+              <MessageSquare className="w-4 h-4 text-teal-400" />
+              <span>{lang === 'ar' ? 'Google Chat' : 'Google Chat'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowGoogleDocsModal(true)}
+              className="py-2.5 px-3 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-300 hover:text-white font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_10px_rgba(59,130,246,0.2)]"
+            >
+              <FileText className="w-4 h-4 text-blue-400" />
+              <span>{lang === 'ar' ? 'Google Docs' : 'Google Docs'}</span>
             </button>
           </div>
 
@@ -203,6 +225,22 @@ export const DebriefModal: React.FC<DebriefModalProps> = ({
       <GmailCommsModal
         isOpen={showGmailModal}
         onClose={() => setShowGmailModal(false)}
+        lang={lang}
+        initialStats={stats}
+      />
+
+      {/* Google Chat Operational Spaces with Pre-filled Combat Stats */}
+      <GoogleChatModal
+        isOpen={showGoogleChatModal}
+        onClose={() => setShowGoogleChatModal(false)}
+        lang={lang}
+        initialStats={stats}
+      />
+
+      {/* Google Docs Intelligence Center with Pre-filled Combat Stats */}
+      <GoogleDocsModal
+        isOpen={showGoogleDocsModal}
+        onClose={() => setShowGoogleDocsModal(false)}
         lang={lang}
         initialStats={stats}
       />
