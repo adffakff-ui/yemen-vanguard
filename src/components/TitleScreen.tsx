@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { WarTheaterId } from '../types/game.ts';
 import { WAR_THEATERS } from '../game/theater.ts';
-import { Shield, Crosshair, Volume2, VolumeX, Globe, Sliders, Palette, Eye, Target } from 'lucide-react';
+import { Shield, Crosshair, Volume2, VolumeX, Globe, Sliders, Palette, Eye, Target, Mail } from 'lucide-react';
 import { soundManager } from '../game/audio.ts';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
 import { DownloadModal } from './DownloadModal.tsx';
+import { GmailCommsModal } from './GmailCommsModal.tsx';
 import { TacticalSaveDossier } from '../game/saveManager.ts';
 
 export interface LoadoutCustomization {
@@ -36,6 +37,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   const [isMuted, setIsMuted] = useState(soundManager.getMuted());
   const [loadout, setLoadout] = useState<LoadoutCustomization>(customization);
   const [showDownloadCenter, setShowDownloadCenter] = useState(false);
+  const [showGmailModal, setShowGmailModal] = useState(false);
 
   const handleToggleMute = () => {
     const muted = soundManager.toggleMute();
@@ -85,6 +87,15 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         <div className="flex items-center gap-2">
           <PWAInstallButton lang={lang} onClick={() => setShowDownloadCenter(true)} />
           
+          <button
+            onClick={() => setShowGmailModal(true)}
+            className="px-3 py-1.5 bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 rounded-lg text-xs font-semibold text-red-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(239,68,68,0.2)]"
+            title={lang === 'ar' ? 'مركز بريد القيادة التكتيكية (Gmail)' : 'Tactical Gmail Center'}
+          >
+            <Mail className="w-3.5 h-3.5 text-red-400" />
+            <span className="hidden sm:inline">{lang === 'ar' ? 'بريد Gmail' : 'Gmail Comms'}</span>
+          </button>
+
           <button
             onClick={onToggleLang}
             className="px-3.5 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 rounded-lg text-xs font-semibold text-slate-200 transition-colors flex items-center gap-2 cursor-pointer"
@@ -384,6 +395,13 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             setLoadout(save.customization);
           }
         }}
+      />
+
+      {/* Tactical Gmail Comms Center Modal */}
+      <GmailCommsModal
+        isOpen={showGmailModal}
+        onClose={() => setShowGmailModal(false)}
+        lang={lang}
       />
     </div>
   );

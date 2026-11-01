@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { GameStats } from '../types/game.ts';
 import { WAR_THEATERS } from '../game/theater.ts';
-import { Award, Target, Clock, ShieldCheck, RotateCcw, Home, Skull, Download, CheckCircle2 } from 'lucide-react';
+import { Award, Target, Clock, ShieldCheck, RotateCcw, Home, Skull, Download, CheckCircle2, Mail } from 'lucide-react';
 import { saveManager } from '../game/saveManager.ts';
+import { GmailCommsModal } from './GmailCommsModal.tsx';
 
 interface DebriefModalProps {
   stats: GameStats;
@@ -18,6 +19,7 @@ export const DebriefModal: React.FC<DebriefModalProps> = ({
   lang,
 }) => {
   const [downloaded, setDownloaded] = useState(false);
+  const [showGmailModal, setShowGmailModal] = useState(false);
   const theater = WAR_THEATERS.find((t) => t.id === stats.theater) || WAR_THEATERS[0];
 
   const handleDownloadReport = () => {
@@ -150,22 +152,32 @@ export const DebriefModal: React.FC<DebriefModalProps> = ({
 
         {/* Action Buttons & Report Download */}
         <div className="space-y-2.5">
-          <button
-            onClick={handleDownloadReport}
-            className="w-full py-2.5 bg-slate-800/90 hover:bg-slate-700/90 border border-amber-500/40 text-amber-300 font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer"
-          >
-            {downloaded ? (
-              <>
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>{lang === 'ar' ? 'تم تحميل تقرير المعركة بنجاح (.txt)' : 'DEBRIEF DOSSIER DOWNLOADED'}</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4 text-amber-400" />
-                <span>{lang === 'ar' ? 'تحميل تقرير العمليات الرسمي (.txt)' : 'DOWNLOAD OFFICIAL AFTER-ACTION DOSSIER'}</span>
-              </>
-            )}
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              onClick={handleDownloadReport}
+              className="py-2.5 px-3 bg-slate-800/90 hover:bg-slate-700/90 border border-amber-500/40 text-amber-300 font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            >
+              {downloaded ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>{lang === 'ar' ? 'تم حفظ التقرير' : 'DOSSIER SAVED'}</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 text-amber-400" />
+                  <span>{lang === 'ar' ? 'تحميل التقرير (.txt)' : 'DOWNLOAD DOSSIER'}</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() => setShowGmailModal(true)}
+              className="py-2.5 px-3 bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-300 hover:text-white font-hud font-bold text-xs rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_10px_rgba(239,68,68,0.2)]"
+            >
+              <Mail className="w-4 h-4 text-red-400" />
+              <span>{lang === 'ar' ? 'إرسال التقرير عبر Gmail' : 'DISPATCH VIA GMAIL'}</span>
+            </button>
+          </div>
 
           <div className="flex items-center gap-3">
             <button
@@ -186,6 +198,14 @@ export const DebriefModal: React.FC<DebriefModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Gmail Tactical Comms Center with Pre-filled After-Action Combat Stats */}
+      <GmailCommsModal
+        isOpen={showGmailModal}
+        onClose={() => setShowGmailModal(false)}
+        lang={lang}
+        initialStats={stats}
+      />
     </div>
   );
 };
