@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  body {
+    font-family: 'Cairo', 'Plus Jakarta Sans', sans-serif;
+    background-color: #0c0e12;
+    color: #e2e8f0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+}
+
+.font-hud {
+  font-family: 'Chakra Petch', 'Plus Jakarta Sans', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.font-arabic {
+  font-family: 'Cairo', sans-serif;
+}
+
+/* Reticle dynamic animations */
+@keyframes recoil-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+.recoil-active {
+  animation: recoil-pulse 0.15s ease-out;
+}
+
+/* Subtle scanlines for tactical radar display */
+.radar-grid {
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 70%, transparent 100%),
+              repeating-radial-gradient(circle, rgba(16, 185, 129, 0.15) 0, rgba(16, 185, 129, 0.15) 1px, transparent 2px, transparent 24px);
+}
+
+/* Intelligent Adaptive HUD scaling and smooth fade transitions */
+.hud-adaptive-transition {
+  transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+              filter 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform, filter;
+}
+
+.hud-combat-dimmed {
+  opacity: 0.25;
+  transform: scale(0.95);
+  filter: blur(0.5px);
+  pointer-events: none;
+}
+
+.hud-combat-dimmed:hover {
+  opacity: 0.95;
+  transform: scale(1);
+  filter: blur(0px);
+  pointer-events: auto;
+}
+
+/* Hit-marker dynamic feedback */
+@keyframes hitmarker-pop {
+  0% { opacity: 1; transform: scale(1.4); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+.hitmarker-active {
+  animation: hitmarker-pop 0.25s ease-out forwards;
+}
+
+.hitmarker-line {
+  position: absolute;
+  background-color: currentColor;
+  width: 10px;
+  height: 2.5px;
+  border-radius: 2px;
+}

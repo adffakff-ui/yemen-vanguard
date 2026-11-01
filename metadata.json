@@ -1,0 +1,6 @@
+{
+  "name": "Yemen Vanguard: Tactical Commando",
+  "description": "3D tactical third-person commando shooter set in Yemen war theaters with realistic combat physics, procedural audio, and bilingual Arabic/English HUD.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
