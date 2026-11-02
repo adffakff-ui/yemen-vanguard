@@ -19,6 +19,111 @@ import { MapEditorModal } from './components/MapEditorModal.tsx';
 import { CustomMapConfig } from './types/game.ts';
 import { registerCustomTheater } from './game/theater.ts';
 
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const buildTacticalSimulation = ({
+  theaterId,
+  playerState,
+  enemiesAlive,
+  waveState,
+  bossState,
+}: {
+  theaterId: WarTheaterId;
+  playerState: PlayerState;
+  enemiesAlive: number;
+  waveState: WaveState;
+  bossState: BossState | null;
+}) => {
+  const weatherMap: Record<WarTheaterId, 'clear' | 'dust_storm' | 'rain' | 'night'> = {
+    sanaa: 'dust_storm',
+    mandeeb: 'clear',
+    hadramaut: 'dust_storm',
+    snow: 'night',
+    forest: 'rain',
+  };
+
+  const weather = weatherMap[theaterId] ?? 'clear';
+  const baseVisibility = weather === 'night' ? 2.5 : weather === 'rain' ? 4.5 : weather === 'dust_storm' ? 3.2 : 6.5;
+  const visibilityKm = Number((baseVisibility - (playerState.isInCombat ? 1.2 : 0.2) + (waveState.current - 1) * 0.2).toFixed(1));
+
+  const suppression = clamp(
+    Math.round(
+      enemiesAlive * 8 +
+        (bossState ? 18 : 0) +
+        (playerState.isInCombat ? 26 : 8) +
+        (weather === 'dust_storm' ? 12 : 0) +
+        (waveState.current - 1) * 10
+    ),
+    8,
+    98
+  );
+
+  const routeRisk = clamp(
+    Number(
+      (0.2 +
+        enemiesAlive * 0.04 +
+        (bossState ? 0.18 : 0) +
+        (waveState.inIntermission ? 0.12 : 0) +
+        (weather === 'dust_storm' ? 0.16 : 0) +
+        (weather === 'night' ? 0.1 : 0))
+        .toFixed(2)
+    ),
+    0.1,
+    0.95
+  );
+
+  const firefightPressure = clamp(
+    Math.round((suppression * 0.7) + (playerState.isInCombat ? 24 : 8) + (playerState.health < 50 ? 14 : 0)),
+    5,
+    100
+  );
+
+  const friendlyCasualtyEstimate = clamp(
+    Math.round(
+      (100 - playerState.armor) * 0.18 +
+        (100 - playerState.health) * 0.22 +
+        suppression * 0.12 +
+        (playerState.isInCombat ? 16 : 0)
+    ),
+    1,
+    95
+  );
+
+  const enemyCasualtyEstimate = clamp(
+    Math.round(
+      (playerState.shotsHit / Math.max(1, playerState.shotsFired)) * 55 +
+        enemiesAlive * 6 +
+        (bossState ? 18 : 0)
+    ),
+    5,
+    99
+  );
+
+  const threatLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' =
+    suppression >= 80 || bossState?.active ? 'CRITICAL' : suppression >= 60 ? 'HIGH' : suppression >= 35 ? 'MODERATE' : 'LOW';
+
+  const timeOnTarget = Math.round(playerState.missionTime);
+  const tacticalScore = Math.round(
+    playerState.score +
+      playerState.kills * 250 +
+      playerState.headshots * 45 +
+      Math.max(0, 100 - friendlyCasualtyEstimate) * 3
+  );
+
+  return {
+    weather,
+    visibilityKm,
+    suppression,
+    threatLevel,
+    routeRisk,
+    firefightPressure,
+    friendlyCasualtyEstimate,
+    enemyCasualtyEstimate,
+    timeOnTarget,
+    tacticalScore,
+  };
+};
+
 export default function App() {
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<YemenCombatEngine | null>(null);
@@ -56,7 +161,7 @@ export default function App() {
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleResize);
       window.visualViewport.addEventListener('scroll', handleResize);
-      handleResize(); // Initial set
+      handleResize();
     }
 
     return () => {
@@ -110,6 +215,18 @@ export default function App() {
     shotsHit: 0,
     headshots: 0,
     missionTime: 0,
+    tacticalSimulation: {
+      weather: 'dust_storm',
+      visibilityKm: 5.1,
+      suppression: 22,
+      threatLevel: 'LOW',
+      routeRisk: 0.2,
+      firefightPressure: 18,
+      friendlyCasualtyEstimate: 5,
+      enemyCasualtyEstimate: 12,
+      timeOnTarget: 0,
+      tacticalScore: 0,
+    },
   });
 
   const [enemiesCount, setEnemiesCount] = useState({ alive: 8, total: 8 });
@@ -140,6 +257,37 @@ export default function App() {
     phase: 'plane',
   });
 
+  useEffect(() => {
+    const nextSimulation = buildTacticalSimulation({
+      theaterId: selectedTheater,
+      playerState,
+      enemiesAlive: enemiesCount.alive,
+      waveState,
+      bossState,
+    });
+
+    setPlayerState((prev) => {
+      const current = prev.tacticalSimulation;
+      if (
+        current &&
+        current.weather === nextSimulation.weather &&
+        current.visibilityKm === nextSimulation.visibilityKm &&
+        current.suppression === nextSimulation.suppression &&
+        current.threatLevel === nextSimulation.threatLevel &&
+        current.routeRisk === nextSimulation.routeRisk &&
+        current.firefightPressure === nextSimulation.firefightPressure &&
+        current.friendlyCasualtyEstimate === nextSimulation.friendlyCasualtyEstimate &&
+        current.enemyCasualtyEstimate === nextSimulation.enemyCasualtyEstimate &&
+        current.timeOnTarget === nextSimulation.timeOnTarget &&
+        current.tacticalScore === nextSimulation.tacticalScore
+      ) {
+        return prev;
+      }
+
+      return { ...prev, tacticalSimulation: nextSimulation };
+    });
+  }, [selectedTheater, playerState, enemiesCount.alive, waveState, bossState]);
+
   // Toggle Language & Sync HTML dir
   const toggleLanguage = useCallback(() => {
     setLang((prev) => {
@@ -161,7 +309,7 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       setAuthLoading(false);
-      
+
       if (user) {
         // Fetch save from cloud and merge
         const cloudSave = await saveManager.fetchFromCloud();
@@ -237,7 +385,6 @@ export default function App() {
 
     engineRef.current = engine;
 
-    // Periodic radar data poller (low frequency 10Hz to save CPU)
     const radarInterval = setInterval(() => {
       if (engineRef.current) {
         setRadarData({
@@ -307,7 +454,6 @@ export default function App() {
     engineRef.current?.loadTheater(selectedTheater);
   };
 
-
   useEffect(() => {
     if (engineRef.current) {
       engineRef.current.updateCommandoLoadout(customization);
@@ -322,17 +468,15 @@ export default function App() {
   };
 
   return (
-    <div 
+    <div
       className="relative overflow-hidden bg-black select-none"
       style={{
         width: 'var(--vw, 100vw)',
         height: 'var(--vh, 100vh)',
       }}
     >
-      {/* Asset Preloader Loading Screen */}
       {isPreloading && <LoadingScreen progressData={preloadProgress} />}
 
-      {/* Dynamic Tactical Background with Panoramic HD Image & Parallax */}
       <GameCanvas
         canvasContainerRef={canvasContainerRef}
         theaterId={selectedTheater}
@@ -340,7 +484,6 @@ export default function App() {
         pitch={camOrientation.pitch}
       />
 
-      {/* Title Screen Overlay */}
       {status === 'title' && (
         <TitleScreen
           selectedTheater={selectedTheater}
@@ -357,7 +500,6 @@ export default function App() {
         />
       )}
 
-      {/* Interactive Reconnaissance & Operations Briefing Screen */}
       {status === 'briefing' && (
         <ReconBriefing
           selectedTheater={selectedTheater}
@@ -372,7 +514,6 @@ export default function App() {
         />
       )}
 
-      {/* Custom Map Builder Modal */}
       {isMapEditorOpen && (
         <MapEditorModal
           onSaveMap={(newMap) => {
@@ -389,7 +530,6 @@ export default function App() {
         />
       )}
 
-      {/* In-Game Low-Occlusion Military HUD */}
       {(status === 'playing' || status === 'paused' || status === 'descent') && (
         <HUD
           playerState={playerState}
@@ -418,7 +558,6 @@ export default function App() {
         />
       )}
 
-      {/* On-Screen Touch Controls (Dynamic Floating Joystick & D-Pad) */}
       {(status === 'playing' || status === 'descent') && showTouchControls && (
         <TouchControls
           engine={engineRef.current}
@@ -428,7 +567,6 @@ export default function App() {
         />
       )}
 
-      {/* Tactical Pause Menu Modal */}
       {status === 'paused' && (
         <PauseModal
           onResume={handleResume}
@@ -439,7 +577,6 @@ export default function App() {
         />
       )}
 
-      {/* After-Action Debrief (Victory / Defeat) */}
       {(status === 'victory' || status === 'gameover') && debriefStats && (
         <DebriefModal
           stats={debriefStats}
