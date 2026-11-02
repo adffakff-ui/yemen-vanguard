@@ -521,6 +521,64 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
       )}
 
+      {/* Battlefield Tactical Simulation */}
+      {playerState.tacticalSimulation && (
+        <div className="absolute left-4 top-20 z-20 w-[250px] max-w-[70vw] pointer-events-none">
+          <div className="bg-slate-950/85 border border-amber-500/40 rounded-xl p-2.5 shadow-[0_0_22px_rgba(245,158,11,0.2)] backdrop-blur-md">
+            <div className="flex items-center justify-between text-[10px] font-hud uppercase tracking-[0.18em] text-amber-400 mb-2">
+              <span>{lang === 'ar' ? 'الميدان التكتيكي' : 'TACTICAL FIELD'}</span>
+              <span className="text-slate-300 font-mono">
+                {playerState.tacticalSimulation.threatLevel}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-hud text-slate-200">
+              <div className="bg-slate-900/70 p-1.5 rounded border border-slate-700">
+                <div className="text-slate-400">{lang === 'ar' ? 'الطقس' : 'WEATHER'}</div>
+                <div className="text-amber-300 font-bold">
+                  {playerState.tacticalSimulation.weather}
+                </div>
+              </div>
+
+              <div className="bg-slate-900/70 p-1.5 rounded border border-slate-700">
+                <div className="text-slate-400">{lang === 'ar' ? 'الرؤية' : 'VISIBILITY'}</div>
+                <div className="text-emerald-300 font-bold">
+                  {playerState.tacticalSimulation.visibilityKm} KM
+                </div>
+              </div>
+
+              <div className="bg-slate-900/70 p-1.5 rounded border border-slate-700">
+                <div className="text-slate-400">{lang === 'ar' ? 'التثبيط' : 'SUPPRESSION'}</div>
+                <div className="text-red-300 font-bold">
+                  {playerState.tacticalSimulation.suppression}%
+                </div>
+              </div>
+
+              <div className="bg-slate-900/70 p-1.5 rounded border border-slate-700">
+                <div className="text-slate-400">{lang === 'ar' ? 'ضغط الاشتباك' : 'PRESSURE'}</div>
+                <div className="text-cyan-300 font-bold">
+                  {playerState.tacticalSimulation.firefightPressure}%
+                </div>
+              </div>
+
+              <div className="bg-slate-900/70 p-1.5 rounded border border-slate-700">
+                <div className="text-slate-400">{lang === 'ar' ? 'خطر الطريق' : 'ROUTE RISK'}</div>
+                <div className="text-violet-300 font-bold">
+                  {(playerState.tacticalSimulation.routeRisk * 100).toFixed(0)}%
+                </div>
+              </div>
+
+              <div className="bg-slate-900/70 p-1.5 rounded border border-slate-700">
+                <div className="text-slate-400">{lang === 'ar' ? 'التقييم التكتيكي' : 'TACTICAL SCORE'}</div>
+                <div className="text-amber-300 font-bold">
+                  {playerState.tacticalSimulation.tacticalScore}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 3D WEAPON INSPECTION OVERLAY CARD */}
       {playerState.isInspecting && (
         <div className="absolute top-16 left-4 sm:left-6 max-w-xs sm:max-w-sm w-full bg-slate-950/90 border-2 border-amber-500/80 p-3 sm:p-4 rounded-xl shadow-[0_0_35px_rgba(245,158,11,0.35)] backdrop-blur-md pointer-events-auto animate-fade-in z-40">

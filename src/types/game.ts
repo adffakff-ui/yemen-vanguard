@@ -46,6 +46,19 @@ export interface CustomMapConfig extends WarTheaterConfig {
   createdTime: number;
 }
 
+export interface TacticalSimulationState {
+  weather: 'clear' | 'dust_storm' | 'rain' | 'night';
+  visibilityKm: number;
+  suppression: number;
+  threatLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  routeRisk: number;
+  firefightPressure: number;
+  friendlyCasualtyEstimate: number;
+  enemyCasualtyEstimate: number;
+  timeOnTarget: number;
+  tacticalScore: number;
+}
+
 export type WeaponType = 'knife' | 'pistol' | 'assault' | 'sniper' | 'shotgun' | 'lmg';
 
 export interface WeaponData {
