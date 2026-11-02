@@ -729,6 +729,81 @@ class TacticalSoundSystem {
       noise.stop(t + 0.5);
     }
   }
+
+  // Metallic weapon inspection tilt sound
+  public playWeaponInspectSound() {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    this.resume();
+    const t = this.ctx.currentTime;
+
+    // Metal metallic slide chime
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1200, t);
+    osc.frequency.exponentialRampToValueAtTime(650, t + 0.22);
+    gain.gain.setValueAtTime(0.3, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.26);
+
+    // Second metallic click
+    const osc2 = this.ctx.createOscillator();
+    const gain2 = this.ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1800, t + 0.12);
+    osc2.frequency.exponentialRampToValueAtTime(1400, t + 0.28);
+    gain2.gain.setValueAtTime(0.25, t + 0.12);
+    gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+
+    osc2.connect(gain2);
+    gain2.connect(this.sfxGain);
+    osc2.start(t + 0.12);
+    osc2.stop(t + 0.33);
+  }
+
+  // Medkit syringe / bandage zip audio effect
+  public playMedkitUseSound() {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    this.resume();
+    const t = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, t);
+    osc.frequency.linearRampToValueAtTime(850, t + 0.35);
+    gain.gain.setValueAtTime(0.4, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.42);
+  }
+
+  // Heavy kevlar armor plate click & slide audio effect
+  public playArmorPlateSound() {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    this.resume();
+    const t = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(220, t);
+    osc.frequency.exponentialRampToValueAtTime(110, t + 0.25);
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.32);
+  }
 }
 
 export const soundManager = new TacticalSoundSystem();

@@ -1,11 +1,16 @@
 import React from 'react';
-import { WarTheaterConfig, WarTheaterId } from '../types/game.ts';
+import { WarTheaterConfig, WarTheaterId, CustomMapConfig } from '../types/game.ts';
 import { WAR_THEATERS } from '../game/theater.ts';
-import { MapPin, ShieldAlert, Crosshair, ArrowRight, ArrowLeft, Radio, Compass, Eye } from 'lucide-react';
+import { ShieldAlert, Crosshair, ArrowRight, ArrowLeft, Radio, Compass, MapPin } from 'lucide-react';
+import { SatelliteMapSelector } from './SatelliteMapSelector.tsx';
 
 interface ReconBriefingProps {
   selectedTheater: WarTheaterId;
   onSelectTheater: (id: WarTheaterId) => void;
+  customMaps: CustomMapConfig[];
+  customDropZone: { x: number; z: number } | null;
+  onSelectDropZone: (coords: { x: number; z: number }) => void;
+  onOpenMapEditor: () => void;
   onConfirmDeploy: () => void;
   onBackToTitle: () => void;
   lang: 'ar' | 'en';
@@ -14,14 +19,21 @@ interface ReconBriefingProps {
 export const ReconBriefing: React.FC<ReconBriefingProps> = ({
   selectedTheater,
   onSelectTheater,
+  customMaps,
+  customDropZone,
+  onSelectDropZone,
+  onOpenMapEditor,
   onConfirmDeploy,
   onBackToTitle,
   lang,
 }) => {
-  const currentTheater = WAR_THEATERS.find((t) => t.id === selectedTheater) || WAR_THEATERS[0];
+  const currentTheater: WarTheaterConfig =
+    customMaps.find((m) => m.id === selectedTheater) ||
+    WAR_THEATERS.find((t) => t.id === selectedTheater) ||
+    WAR_THEATERS[0];
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col justify-between p-4 sm:p-8 bg-slate-950/95 text-slate-100 select-none overflow-y-auto">
+    <div className="absolute inset-0 z-30 overflow-y-auto bg-slate-950/95 text-slate-100 select-none p-4 sm:p-8 flex flex-col min-h-full pb-28 scroll-smooth touch-pan-y">
       {/* Top Header Bar */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-3">
         <div className="flex items-center gap-3">
@@ -30,10 +42,10 @@ export const ReconBriefing: React.FC<ReconBriefingProps> = ({
           </div>
           <div>
             <div className="text-[11px] font-hud text-amber-400 font-bold tracking-widest uppercase">
-              {lang === 'ar' ? 'غرفة العمليات المشتركة // قيادة الاستطلاع' : 'TACTICAL JOINT OPERATIONS // RECON DOSSIER'}
+              {lang === 'ar' ? 'غرفة العمليات المشتركة // قيادة الاستطلاع الفضائي' : 'TACTICAL JOINT OPERATIONS // SATELLITE RECON'}
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white font-arabic">
-              {lang === 'ar' ? 'خريطة مسرح العمليات وتقرير الاستطلاع' : 'YEMEN THEATER RECONNAISSANCE MAP'}
+              {lang === 'ar' ? 'قاعدة خرائط الأقمار الصناعية وتقرير الاستطلاع' : 'SATELLITE RECON MAPS & INTELLIGENCE DOSSIER'}
             </h1>
           </div>
         </div>
@@ -47,120 +59,19 @@ export const ReconBriefing: React.FC<ReconBriefingProps> = ({
         </button>
       </div>
 
-      {/* Main Grid: Left Interactive Satellite Map, Right Target Dossier */}
+      {/* Main Grid: Left Interactive Satellite Map Database, Right Target Dossier */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 my-auto py-4">
-        {/* SATELLITE OPERATIONAL MAP (7 Cols) */}
-        <div className="lg:col-span-7 bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-6 relative overflow-hidden flex flex-col justify-between">
-          {/* Tactical Map Grid Canvas / SVG */}
-          <div className="relative w-full h-72 sm:h-96 rounded-xl border border-slate-700/60 bg-gradient-to-b from-slate-950 to-slate-900 overflow-hidden flex items-center justify-center">
-            {/* Grid Coordinates Overlay */}
-            <div className="absolute inset-0 radar-grid opacity-60 pointer-events-none" />
-
-            {/* Yemen Topographic Stylized Vector Map Contour */}
-            <svg
-              className="w-full h-full p-4 text-slate-800 opacity-90"
-              viewBox="0 0 600 400"
-              fill="none"
-            >
-              {/* Coastline / Country Silhouette */}
-              <path
-                d="M 60 220 Q 120 180 180 200 T 320 220 T 480 210 T 560 160 L 580 320 Q 450 360 300 340 T 120 330 Z"
-                fill="rgba(30, 41, 59, 0.4)"
-                stroke="#475569"
-                strokeWidth="2"
-                strokeDasharray="4 2"
-              />
-              {/* Mountain ridge elevation lines */}
-              <path
-                d="M 140 210 Q 200 160 260 210 T 380 200"
-                stroke="#64748b"
-                strokeWidth="1.5"
-                strokeDasharray="2 4"
-              />
-              <path
-                d="M 180 240 Q 240 190 320 230"
-                stroke="#64748b"
-                strokeWidth="1"
-              />
-
-              {/* Red Sea & Gulf of Aden water labels */}
-              <text x="70" y="320" fill="#38bdf8" fontSize="11" fontFamily="monospace" opacity="0.6">
-                RED SEA // البحر الأحمر
-              </text>
-              <text x="320" y="360" fill="#38bdf8" fontSize="11" fontFamily="monospace" opacity="0.6">
-                GULF OF ADEN // خليج عدن
-              </text>
-            </svg>
-
-            {/* INTERACTIVE THEATER PINS ON MAP */}
-            {/* Sana'a Pin (Highlands) */}
-            <button
-              onClick={() => onSelectTheater('sanaa')}
-              className={`absolute top-24 left-1/3 -translate-x-1/2 p-2 rounded-xl transition-all cursor-pointer flex flex-col items-center group ${
-                selectedTheater === 'sanaa'
-                  ? 'bg-amber-500/20 border-2 border-amber-400 scale-110 shadow-[0_0_20px_#f59e0b]'
-                  : 'bg-slate-900/90 border border-slate-700 hover:border-amber-400/60'
-              }`}
-            >
-              <MapPin className={`w-6 h-6 ${selectedTheater === 'sanaa' ? 'text-amber-400' : 'text-slate-400'}`} />
-              <span className="text-[10px] font-hud font-bold text-slate-200 bg-slate-950/90 px-1.5 py-0.5 rounded mt-1 whitespace-nowrap">
-                {lang === 'ar' ? 'صنعاء (الحصن الجبلي)' : "Sana'a Citadel"}
-              </span>
-            </button>
-
-            {/* Bab-el-Mandeb Pin (Strait Coast) */}
-            <button
-              onClick={() => onSelectTheater('mandeeb')}
-              className={`absolute bottom-16 left-24 p-2 rounded-xl transition-all cursor-pointer flex flex-col items-center group ${
-                selectedTheater === 'mandeeb'
-                  ? 'bg-cyan-500/20 border-2 border-cyan-400 scale-110 shadow-[0_0_20px_#06b6d4]'
-                  : 'bg-slate-900/90 border border-slate-700 hover:border-cyan-400/60'
-              }`}
-            >
-              <MapPin className={`w-6 h-6 ${selectedTheater === 'mandeeb' ? 'text-cyan-400' : 'text-slate-400'}`} />
-              <span className="text-[10px] font-hud font-bold text-slate-200 bg-slate-950/90 px-1.5 py-0.5 rounded mt-1 whitespace-nowrap">
-                {lang === 'ar' ? 'مضيق باب المندب' : 'Bab-el-Mandeb'}
-              </span>
-            </button>
-
-            {/* Hadramaut Pin (Canyon Valley) */}
-            <button
-              onClick={() => onSelectTheater('hadramaut')}
-              className={`absolute top-28 right-28 p-2 rounded-xl transition-all cursor-pointer flex flex-col items-center group ${
-                selectedTheater === 'hadramaut'
-                  ? 'bg-orange-500/20 border-2 border-orange-400 scale-110 shadow-[0_0_20px_#f97316]'
-                  : 'bg-slate-900/90 border border-slate-700 hover:border-orange-400/60'
-              }`}
-            >
-              <MapPin className={`w-6 h-6 ${selectedTheater === 'hadramaut' ? 'text-orange-400' : 'text-slate-400'}`} />
-              <span className="text-[10px] font-hud font-bold text-slate-200 bg-slate-950/90 px-1.5 py-0.5 rounded mt-1 whitespace-nowrap">
-                {lang === 'ar' ? 'وادي حضرموت' : 'Hadramaut Gorge'}
-              </span>
-            </button>
-
-            {/* Live GPS Coordinates Tracker */}
-            <div className="absolute bottom-2 left-2 text-[10px] font-mono text-slate-400 bg-slate-950/80 px-2 py-1 rounded border border-slate-800">
-              COORDS: {currentTheater.coordinates.lat}, {currentTheater.coordinates.lng}
-            </div>
-          </div>
-
-          {/* Quick Region Selector Strip below map */}
-          <div className="grid grid-cols-3 gap-2 mt-3">
-            {WAR_THEATERS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => onSelectTheater(t.id)}
-                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                  selectedTheater === t.id
-                    ? 'bg-amber-500/15 border-amber-500 text-amber-300 font-bold'
-                    : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <div className="text-xs font-arabic">{lang === 'ar' ? t.nameAr : t.nameEn}</div>
-                <div className="text-[9px] font-mono text-slate-500 mt-0.5">{t.threatLevel} THREAT</div>
-              </button>
-            ))}
-          </div>
+        {/* INTERACTIVE SATELLITE RECON MAP SELECTOR (7 Cols) */}
+        <div className="lg:col-span-7">
+          <SatelliteMapSelector
+            selectedTheater={selectedTheater}
+            onSelectTheater={onSelectTheater}
+            customMaps={customMaps}
+            customDropZone={customDropZone}
+            onSelectDropZone={onSelectDropZone}
+            lang={lang}
+            onOpenMapEditor={onOpenMapEditor}
+          />
         </div>
 
         {/* TACTICAL INTELLIGENCE DOSSIER (5 Cols) */}
@@ -190,7 +101,7 @@ export const ReconBriefing: React.FC<ReconBriefingProps> = ({
                 <div className="text-xs font-hud text-slate-400 font-semibold">
                   {lang === 'ar' ? 'وصف مسرح القتال:' : 'TERRAIN TOPOGRAPHY:'}
                 </div>
-                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed font-arabic">
                   {lang === 'ar' ? currentTheater.descriptionAr : currentTheater.descriptionEn}
                 </p>
               </div>
@@ -199,12 +110,25 @@ export const ReconBriefing: React.FC<ReconBriefingProps> = ({
                 <div className="text-xs font-hud text-amber-400 font-semibold">
                   {lang === 'ar' ? 'الأمر القتالي الأساسي:' : 'PRIMARY DIRECTIVE:'}
                 </div>
-                <p className="text-xs text-slate-200 font-bold mt-1 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
+                <p className="text-xs text-slate-200 font-bold mt-1 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20 font-arabic">
                   {lang === 'ar' ? currentTheater.objectiveAr : currentTheater.objectiveEn}
                 </p>
               </div>
 
-              {/* 3-SECTOR & 3-WAVE COMBAT ESCALATION PREVIEW */}
+              {/* CUSTOM PARATROOPER DROP ZONE STATS */}
+              {customDropZone && (
+                <div className="bg-amber-500/15 border border-amber-500/40 p-3 rounded-xl text-xs font-hud">
+                  <div className="text-amber-400 font-bold flex items-center gap-1 mb-1">
+                    <MapPin className="w-4 h-4 text-amber-400" />
+                    <span>{lang === 'ar' ? 'إحداثيات الإنزال المظلي المخصصة:' : 'CUSTOM DROP ZONE TARGET:'}</span>
+                  </div>
+                  <div className="font-mono text-slate-200">
+                    X: {customDropZone.x} meters, Z: {customDropZone.z} meters
+                  </div>
+                </div>
+              )}
+
+              {/* MULTI-TIER SECTOR BREAKDOWN */}
               <div className="pt-2">
                 <div className="text-xs font-hud text-slate-400 font-semibold mb-2">
                   {lang === 'ar' ? 'مستويات القطاعات التكتيكية والاشتباك (3 قطاعات):' : 'MULTI-TIER SECTOR BREAKDOWN:'}
@@ -241,9 +165,9 @@ export const ReconBriefing: React.FC<ReconBriefingProps> = ({
           <div className="mt-6 pt-4 border-t border-slate-800">
             <button
               onClick={onConfirmDeploy}
-              className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold font-hud text-base rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] flex items-center justify-center gap-3 cursor-pointer"
+              className="w-full py-4 px-6 bg-gradient-to-r from-amber-500 to-amber-600 active:scale-95 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold font-hud text-base rounded-xl transition-all shadow-[0_0_25px_rgba(245,158,11,0.5)] flex items-center justify-center gap-3 cursor-pointer touch-manipulation min-h-[52px]"
             >
-              <Compass className="w-5 h-5 text-slate-950" />
+              <Compass className="w-6 h-6 text-slate-950" />
               <span>
                 {lang === 'ar' ? 'تأكيد الخطة وبدء الانتشار التكتيكي' : 'CONFIRM ORDERS & DEPLOY NOW'}
               </span>

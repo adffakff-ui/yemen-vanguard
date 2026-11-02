@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { CommandoModel, createCommandoModel } from './models.ts';
 import { soundManager } from './audio.ts';
+import { LandedParatrooperData } from './descent.ts';
+import { LootSystem } from './lootSystem.ts';
 
 export interface EnemyEntity {
   id: number;
@@ -10,7 +12,7 @@ export interface EnemyEntity {
   targetPos: THREE.Vector3;
   health: number;
   maxHealth: number;
-  state: 'patrol' | 'alert' | 'aiming' | 'attacking' | 'dead';
+  state: 'patrol' | 'alert' | 'aiming' | 'attacking' | 'dead' | 'scavenge';
   stateTimer: number;
   shootCooldown: number;
   telegraphLaser: THREE.Line;
@@ -19,6 +21,9 @@ export interface EnemyEntity {
   deathAnimTimer: number;
   walkCycle: number;
   type: 'rifleman' | 'heavy' | 'sniper';
+  isArmed: boolean;
+  targetCrateId?: string;
+  targetCratePos?: THREE.Vector3;
 }
 
 export class EnemySystem {
@@ -28,6 +33,66 @@ export class EnemySystem {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+  }
+
+  public spawnParatrooperScavengers(landedBots: LandedParatrooperData[], lootSystem: LootSystem) {
+    this.clear();
+
+    landedBots.forEach((botData, idx) => {
+      const model = createCommandoModel(false);
+      model.root.position.copy(botData.position);
+      model.root.rotation.y = botData.rotationY;
+      this.scene.add(model.root);
+
+      // Weapon initially holstered / hidden until looted
+      model.weaponGroup.visible = false;
+
+      const laserGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, 20),
+      ]);
+      const laserMat = new THREE.LineDashedMaterial({
+        color: 0xef4444,
+        dashSize: 0.5,
+        gapSize: 0.3,
+        transparent: true,
+        opacity: 0,
+      });
+      const telegraphLaser = new THREE.Line(laserGeo, laserMat);
+      telegraphLaser.computeLineDistances();
+      model.weaponGroup.add(telegraphLaser);
+
+      const type = idx % 3 === 0 ? 'heavy' : (idx % 4 === 0 ? 'sniper' : 'rifleman');
+      const maxHealth = type === 'heavy' ? 140 : (type === 'sniper' ? 60 : 80);
+
+      // Paratroopers disperse immediately to search for nearest weapon crate
+      const nearestCrate = lootSystem.findNearestUnlootedCrate(botData.position, 350);
+
+      const enemy: EnemyEntity = {
+        id: this.idCounter++,
+        model,
+        position: botData.position.clone(),
+        velocity: new THREE.Vector3(),
+        targetPos: nearestCrate ? new THREE.Vector3(nearestCrate.x, nearestCrate.y, nearestCrate.z) : botData.position.clone(),
+        health: maxHealth,
+        maxHealth,
+        state: 'scavenge',
+        stateTimer: 0,
+        shootCooldown: 1.5 + Math.random() * 2,
+        telegraphLaser,
+        alertLevel: 0,
+        isDead: false,
+        deathAnimTimer: 0,
+        walkCycle: Math.random() * 10,
+        type,
+        isArmed: false,
+        targetCrateId: nearestCrate ? nearestCrate.id : undefined,
+        targetCratePos: nearestCrate ? new THREE.Vector3(nearestCrate.x, nearestCrate.y, nearestCrate.z) : undefined,
+      };
+
+      model.setAnimation('run', 0);
+      this.enemies.push(enemy);
+    });
   }
 
   public spawnEnemies(spawnPoints: THREE.Vector3[]) {
@@ -74,6 +139,7 @@ export class EnemySystem {
         deathAnimTimer: 0,
         walkCycle: Math.random() * 10,
         type,
+        isArmed: true,
       });
     });
   }
@@ -81,7 +147,8 @@ export class EnemySystem {
   public update(
     dt: number,
     playerPos: THREE.Vector3,
-    onEnemyShoot: (from: THREE.Vector3, dir: THREE.Vector3, damage: number) => void
+    onEnemyShoot: (from: THREE.Vector3, dir: THREE.Vector3, damage: number) => void,
+    lootSystem?: LootSystem
   ) {
     const toPlayer = new THREE.Vector3();
 
@@ -93,6 +160,70 @@ export class EnemySystem {
           enemy.model.root.rotation.x = THREE.MathUtils.lerp(0, Math.PI / 2.2, enemy.deathAnimTimer);
           enemy.model.root.position.y = THREE.MathUtils.lerp(0, 0.2, enemy.deathAnimTimer);
         }
+        return;
+      }
+
+      // SCAVENGE STATE: Paratrooper landed and sprints across terrain to find & loot weapon caches
+      if (enemy.state === 'scavenge') {
+        (enemy.telegraphLaser.material as THREE.LineDashedMaterial).opacity = 0;
+
+        if (lootSystem) {
+          // If no target crate or current target was already looted, find closest available
+          if (!enemy.targetCratePos || !enemy.targetCrateId) {
+            const nearest = lootSystem.findNearestUnlootedCrate(enemy.position, 450);
+            if (nearest) {
+              enemy.targetCrateId = nearest.id;
+              enemy.targetCratePos = new THREE.Vector3(nearest.x, nearest.y, nearest.z);
+            } else {
+              // No crates available; fall back to patrol
+              enemy.state = 'patrol';
+              enemy.isArmed = true;
+              enemy.model.weaponGroup.visible = true;
+              return;
+            }
+          }
+
+          const dx = enemy.targetCratePos.x - enemy.position.x;
+          const dz = enemy.targetCratePos.z - enemy.position.z;
+          const distToCrate = Math.hypot(dx, dz);
+
+          if (distToCrate > 2.2) {
+            // Sprint toward weapon cache
+            const targetAngle = Math.atan2(dx, dz);
+            enemy.model.root.rotation.y = THREE.MathUtils.damp(
+              enemy.model.root.rotation.y,
+              targetAngle,
+              10,
+              dt
+            );
+
+            const sprintSpeed = 5.8; // Fast sprint across open terrain
+            enemy.position.x += Math.sin(targetAngle) * sprintSpeed * dt;
+            enemy.position.z += Math.cos(targetAngle) * sprintSpeed * dt;
+            enemy.model.root.position.copy(enemy.position);
+
+            enemy.walkCycle += dt * 8;
+            enemy.model.setAnimation('run', enemy.walkCycle);
+          } else {
+            // Reached weapon crate! Scavenge and equip weapon
+            const crateRecord = lootSystem.getCrates().find((c) => c.id === enemy.targetCrateId);
+            if (crateRecord && !crateRecord.isLooted) {
+              crateRecord.isLooted = true;
+            }
+
+            enemy.isArmed = true;
+            enemy.model.weaponGroup.visible = true;
+            enemy.state = 'patrol';
+            enemy.stateTimer = 2.0;
+            enemy.model.setAnimation('idle', 0);
+            soundManager.playReload();
+          }
+        } else {
+          enemy.state = 'patrol';
+          enemy.isArmed = true;
+          enemy.model.weaponGroup.visible = true;
+        }
+
         return;
       }
 
@@ -124,8 +255,8 @@ export class EnemySystem {
         );
       }
 
-      // AI State Transitions
-      if (enemy.alertLevel > 0.6) {
+      // AI State Transitions (only armed soldiers can enter aiming/attacking)
+      if (enemy.isArmed && enemy.alertLevel > 0.6) {
         if (enemy.state === 'patrol') {
           enemy.state = 'aiming';
           enemy.stateTimer = enemy.type === 'sniper' ? 1.4 : 0.7; // Windup telegraph
@@ -136,7 +267,7 @@ export class EnemySystem {
       }
 
       // Execution by state
-      if (enemy.state === 'aiming') {
+      if (enemy.state === 'aiming' && enemy.isArmed) {
         enemy.model.setAnimation('aim', 0);
 
         // Turn on telegraph laser indicator (flickers in warning)
@@ -169,7 +300,7 @@ export class EnemySystem {
           soundManager.playRifleShot();
           enemy.shootCooldown = enemy.type === 'sniper' ? 3.0 : 1.4 + Math.random() * 0.8;
         }
-      } else if (enemy.state === 'attacking') {
+      } else if (enemy.state === 'attacking' && enemy.isArmed) {
         enemy.model.setAnimation('aim', 0);
         if (enemy.stateTimer <= 0) {
           enemy.state = 'aiming';

@@ -89,7 +89,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   }, [onStartGame]);
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col justify-between p-4 sm:p-8 md:p-12 pointer-events-auto select-none bg-gradient-to-t from-slate-950/95 via-slate-950/50 to-transparent">
+    <div className="absolute inset-0 z-20 overflow-y-auto p-4 sm:p-8 md:p-12 pointer-events-auto select-none bg-gradient-to-t from-slate-950/95 via-slate-950/50 to-transparent flex flex-col min-h-full justify-between gap-6 pb-28 scroll-smooth touch-pan-y">
       {/* Top Header Row */}
       <div className="flex items-center justify-between w-full">
         {/* Military Unit Insignia Tag */}
@@ -472,12 +472,12 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         )}
 
         {/* Primary Start CTA Button & Download Button */}
-        <div className="pt-2 flex flex-wrap items-center gap-3 sm:gap-4">
+        <div className="pt-3 pb-4 flex flex-wrap items-center gap-3 sm:gap-4">
           <button
             onClick={() => setShowLobbyModal(true)}
-            className="px-8 sm:px-9 py-3.5 sm:py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold font-hud text-sm sm:text-base rounded-xl transition-all transform hover:scale-[1.02] shadow-[0_0_25px_rgba(245,158,11,0.4)] flex items-center gap-3 cursor-pointer"
+            className="w-full sm:w-auto px-9 py-4 bg-gradient-to-r from-amber-500 to-amber-600 active:scale-95 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold font-hud text-base rounded-xl transition-all shadow-[0_0_30px_rgba(245,158,11,0.6)] flex items-center justify-center gap-3 cursor-pointer touch-manipulation min-h-[54px]"
           >
-            <Crosshair className="w-5 h-5 text-slate-950" />
+            <Crosshair className="w-6 h-6 text-slate-950" />
             <span>
               {lang === 'ar' ? 'بدء المداهمة والانتشار [SPACE]' : 'DEPLOY COMMANDO [SPACE / ENTER]'}
             </span>

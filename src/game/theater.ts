@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WarTheaterConfig, WarTheaterId } from '../types/game.ts';
+import { WarTheaterConfig, WarTheaterId, CustomMapConfig } from '../types/game.ts';
 import {
   createYemenTower,
   createSandbagBunker,
@@ -33,6 +33,39 @@ export interface TheaterBuildResult {
   playerSpawnPoint: THREE.Vector3;
   propsGroup: THREE.Group;
   voxelTerrain: VoxelTerrain;
+  crateSpawns: { x: number; y: number; z: number; type?: 'tactical_box' | 'air_drop' | 'military_locker' }[];
+  vehicleSpawns: { x: number; y: number; z: number; rotationY?: number }[];
+  getTerrainHeight: (x: number, z: number) => number;
+}
+
+/**
+ * Procedural rolling terrain height calculation for vast battle royale scale (1000m+ area)
+ */
+export function getTheaterTerrainHeight(x: number, z: number, theaterId: WarTheaterId = 'sanaa'): number {
+  if (theaterId === 'sanaa') {
+    // Mountain citadel & high plateau with ridges and rolling valleys
+    const broadRidge = Math.sin(x * 0.008 + 0.3) * Math.cos(z * 0.008) * 6.5;
+    const rollingHills = Math.sin(x * 0.025) * Math.sin(z * 0.02) * 2.8;
+    const microDunes = Math.cos(x * 0.06 + z * 0.04) * 0.7;
+    // Keep central compound relatively even for tactical CQB
+    const distFromCenter = Math.hypot(x, z);
+    const flatFactor = Math.min(1.0, Math.max(0.0, (distFromCenter - 25) / 60));
+    return (broadRidge + rollingHills + microDunes) * flatFactor;
+  } else if (theaterId === 'mandeeb') {
+    // Coastal lowlands and seaside dunes
+    const duneWave = Math.sin(x * 0.012 + z * 0.006) * 4.2;
+    const ripple = Math.sin(x * 0.04) * 1.2;
+    const distFromCenter = Math.hypot(x, z);
+    const flatFactor = Math.min(1.0, Math.max(0.0, (distFromCenter - 30) / 70));
+    return Math.max(0, (duneWave + ripple) * flatFactor);
+  } else {
+    // Hadramaut canyon plateau / desert dunes
+    const canyonRidge = Math.cos(x * 0.01) * Math.sin(z * 0.015) * 5.5;
+    const rockyOutcrop = Math.sin(x * 0.035 + 1.2) * 2.2;
+    const distFromCenter = Math.hypot(x, z);
+    const flatFactor = Math.min(1.0, Math.max(0.0, (distFromCenter - 25) / 60));
+    return (canyonRidge + rockyOutcrop) * flatFactor;
+  }
 }
 
 export const WAR_THEATERS: WarTheaterConfig[] = [
@@ -55,6 +88,16 @@ export const WAR_THEATERS: WarTheaterConfig[] = [
     barrelCount: 6,
     coordinates: { lat: "15°21'N", lng: "44°12'E" },
     threatLevel: 'HIGH',
+    elevationProfile: 'mountains',
+    heatmapData: [
+      { x: -18, z: -35, intensity: 0.95, labelAr: 'عش قناصة - البرج العالي', labelEn: 'Tower Sniper Nest' },
+      { x: 22, z: -15, intensity: 0.85, labelAr: 'تجمع خنادق - قطاع ألفا', labelEn: 'Trench Alpha Sector' },
+      { x: 0, z: -55, intensity: 0.70, labelAr: 'ممر تعزيزات معادية', labelEn: 'Hostile Reinforcement Route' },
+    ],
+    patrolRoutes: [
+      { from: { x: -20, z: -30 }, to: { x: 20, z: -30 }, type: 'sniper' },
+      { from: { x: -10, z: -10 }, to: { x: 10, z: -50 }, type: 'infantry' },
+    ],
   },
   {
     id: 'mandeeb',
@@ -75,6 +118,16 @@ export const WAR_THEATERS: WarTheaterConfig[] = [
     barrelCount: 8,
     coordinates: { lat: "12°35'N", lng: "43°20'E" },
     threatLevel: 'EXTREME',
+    elevationProfile: 'coastal_dunes',
+    heatmapData: [
+      { x: 0, z: -40, intensity: 1.0, labelAr: 'دشمة مراقبة - مدفع ساحلي', labelEn: 'Coastal Pillbox Autocannon' },
+      { x: -30, z: -20, intensity: 0.78, labelAr: 'ممر الحاويات - كمين ثقيل', labelEn: 'Container Corridor Chokepoint' },
+      { x: 35, z: -45, intensity: 0.88, labelAr: 'مسار المركبة المدرعة', labelEn: 'Armored Technical Patrol' },
+    ],
+    patrolRoutes: [
+      { from: { x: -35, z: -40 }, to: { x: 35, z: -40 }, type: 'buggy' },
+      { from: { x: -15, z: -15 }, to: { x: -15, z: -60 }, type: 'infantry' },
+    ],
   },
   {
     id: 'hadramaut',
@@ -95,6 +148,14 @@ export const WAR_THEATERS: WarTheaterConfig[] = [
     barrelCount: 8,
     coordinates: { lat: "15°55'N", lng: "48°47'E" },
     threatLevel: 'CRITICAL',
+    elevationProfile: 'sandstone_canyon',
+    heatmapData: [
+      { x: -25, z: -45, intensity: 0.92, labelAr: 'ممر الوادي الضيق - منطقة خطر', labelEn: 'Gorge Chokepoint Ambush' },
+      { x: 30, z: -30, intensity: 0.82, labelAr: 'مظلة قناصة المرتفعات', labelEn: 'Highland Ridge Sniper' },
+    ],
+    patrolRoutes: [
+      { from: { x: -25, z: -50 }, to: { x: 25, z: -20 }, type: 'sniper' },
+    ],
   },
   {
     id: 'snow',
@@ -115,6 +176,14 @@ export const WAR_THEATERS: WarTheaterConfig[] = [
     barrelCount: 6,
     coordinates: { lat: "14°33'N", lng: "44°24'E" },
     threatLevel: 'EXTREME',
+    elevationProfile: 'snow_peaks',
+    heatmapData: [
+      { x: 0, z: -50, intensity: 0.98, labelAr: 'قمة القناصة - رؤية حرارية', labelEn: 'Frozen Peak Thermal Scope' },
+      { x: -30, z: -30, intensity: 0.75, labelAr: 'مستودع الوقود والمتفجرات', labelEn: 'Fuel Depot Perimeter' },
+    ],
+    patrolRoutes: [
+      { from: { x: -30, z: -40 }, to: { x: 30, z: -40 }, type: 'infantry' },
+    ],
   },
   {
     id: 'forest',
@@ -135,8 +204,25 @@ export const WAR_THEATERS: WarTheaterConfig[] = [
     barrelCount: 10,
     coordinates: { lat: "14°37'N", lng: "43°42'E" },
     threatLevel: 'CRITICAL',
+    elevationProfile: 'flat_basin',
+    heatmapData: [
+      { x: 15, z: -35, intensity: 0.89, labelAr: 'كمين المدرجات الخضراء', labelEn: 'Terrace Jungle Ambush' },
+      { x: -20, z: -40, intensity: 0.80, labelAr: 'مخيم دوريات الأحراش', labelEn: 'Canopy Recon Camp' },
+    ],
+    patrolRoutes: [
+      { from: { x: -20, z: -30 }, to: { x: 20, z: -50 }, type: 'infantry' },
+    ],
   },
 ];
+
+export function registerCustomTheater(customMap: CustomMapConfig) {
+  const existingIndex = WAR_THEATERS.findIndex((t) => t.id === customMap.id);
+  if (existingIndex >= 0) {
+    WAR_THEATERS[existingIndex] = customMap;
+  } else {
+    WAR_THEATERS.push(customMap);
+  }
+}
 
 export function buildWarTheater(theaterId: WarTheaterId, scene: THREE.Scene, groundTexture?: THREE.CanvasTexture): TheaterBuildResult {
   const config = WAR_THEATERS.find((t) => t.id === theaterId) || WAR_THEATERS[0];
@@ -149,44 +235,63 @@ export function buildWarTheater(theaterId: WarTheaterId, scene: THREE.Scene, gro
   const enemySpawnPoints: THREE.Vector3[] = [];
   const playerSpawnPoint = new THREE.Vector3(0, 0, 32);
 
-  // Voxel Ground (Prototype for destruction)
+  // Broad Battle Royale Terrain Mesh (1200m x 1200m open landscape)
+  const terrainSize = 1200;
+  const segments = 64;
+  const groundGeo = new THREE.PlaneGeometry(terrainSize, terrainSize, segments, segments);
+  groundGeo.rotateX(-Math.PI / 2);
+  
+  // Elevate terrain vertices to create organic dunes and mountain ridges
+  const posAttr = groundGeo.attributes.position;
+  for (let i = 0; i < posAttr.count; i++) {
+    const vx = posAttr.getX(i);
+    const vz = posAttr.getZ(i);
+    const vy = getTheaterTerrainHeight(vx, vz, theaterId);
+    posAttr.setY(i, vy);
+  }
+  groundGeo.computeVertexNormals();
+
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: config.groundColor,
+    roughness: 0.95,
+    metalness: 0.05,
+    map: groundTexture || null,
+  });
+  if (groundTexture) {
+    groundTexture.wrapS = THREE.RepeatWrapping;
+    groundTexture.wrapT = THREE.RepeatWrapping;
+    groundTexture.repeat.set(48, 48);
+  }
+  const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+  groundMesh.receiveShadow = true;
+  propsGroup.add(groundMesh);
+
+  // Voxel Ground in Central Sector (for close-quarters combat destructibility)
   const voxelTerrain = new VoxelTerrain(config.groundColor);
   propsGroup.add(voxelTerrain.group);
 
-  // Hidden ground plane for raycasting and basic shadows if needed
-  const groundGeo = new THREE.PlaneGeometry(160, 160);
-  const groundMat = new THREE.MeshStandardMaterial({
-    visible: false, // Make it invisible but kept for physics/raycasting if needed
-  });
-  const groundMesh = new THREE.Mesh(groundGeo, groundMat);
-  groundMesh.rotation.x = -Math.PI / 2;
-  groundMesh.position.y = -0.1; 
-  propsGroup.add(groundMesh);
-
-  // Natural Perimeter: Cliffs, sandstone boulders, and perimeter defenses
-  // Per Three.js skill: Never box scenes in bare indoor walls; use natural barriers extending beyond playfield
+  // Natural Perimeter: Cliffs and mountain ridge boundaries far out (radius ~480m)
   const rockMat = new THREE.MeshStandardMaterial({
     color: config.groundColor,
-    roughness: 0.9,
-    metalness: 0.1,
+    roughness: 0.92,
+    metalness: 0.08,
   });
 
-  // Perimeter cliffs encircling the arena
-  const perimeterRadius = 55;
-  const numPerimeterRocks = 26;
+  const perimeterRadius = 480;
+  const numPerimeterRocks = 48;
   for (let i = 0; i < numPerimeterRocks; i++) {
     const angle = (i / numPerimeterRocks) * Math.PI * 2;
-    const x = Math.cos(angle) * perimeterRadius + (Math.random() - 0.5) * 8;
-    const z = Math.sin(angle) * perimeterRadius + (Math.random() - 0.5) * 8;
-    const rockHeight = 12 + Math.random() * 10;
-    const rockWidth = 14 + Math.random() * 8;
+    const x = Math.cos(angle) * perimeterRadius + (Math.random() - 0.5) * 40;
+    const z = Math.sin(angle) * perimeterRadius + (Math.random() - 0.5) * 40;
+    const rockHeight = 45 + Math.random() * 30;
+    const rockWidth = 60 + Math.random() * 35;
 
     const rock = new THREE.Mesh(
       new THREE.DodecahedronGeometry(rockWidth * 0.5, 1),
       rockMat
     );
     rock.scale.set(1, rockHeight / (rockWidth * 0.5), 1);
-    rock.position.set(x, rockHeight * 0.35, z);
+    rock.position.set(x, rockHeight * 0.35 + getTheaterTerrainHeight(x, z, theaterId), z);
     rock.rotation.set(Math.random() * 0.4, Math.random() * Math.PI, Math.random() * 0.4);
     rock.castShadow = true;
     rock.receiveShadow = true;
@@ -484,6 +589,55 @@ export function buildWarTheater(theaterId: WarTheaterId, scene: THREE.Scene, gro
     });
   });
 
+  // --- Battle Royale Loot Caches Spawns (32+ distributed tactical weapon crates) ---
+  const crateSpawns: { x: number; y: number; z: number; type?: 'tactical_box' | 'air_drop' | 'military_locker' }[] = [
+    // Central Fortress & Outpost Perimeter Caches
+    { x: -14, y: 0.1, z: 8, type: 'tactical_box' },
+    { x: 14, y: 0.1, z: 8, type: 'tactical_box' },
+    { x: 0, y: 0.1, z: 22, type: 'military_locker' },
+    { x: -22, y: 0.1, z: -14, type: 'tactical_box' },
+    { x: 22, y: 0.1, z: -14, type: 'tactical_box' },
+    { x: 0, y: 0.1, z: -28, type: 'air_drop' },
+    // Near trenches & bunkers
+    { x: -10, y: 0.1, z: 18, type: 'tactical_box' },
+    { x: 10, y: 0.1, z: 18, type: 'tactical_box' },
+    { x: -28, y: 0.1, z: 4, type: 'military_locker' },
+    { x: 28, y: 0.1, z: 4, type: 'military_locker' },
+    // Outer Zone Alpha (North & North-West Hills: 60m - 180m)
+    { x: -65, y: getTheaterTerrainHeight(-65, -80, theaterId), z: -80, type: 'tactical_box' },
+    { x: -120, y: getTheaterTerrainHeight(-120, -110, theaterId), z: -110, type: 'air_drop' },
+    { x: -175, y: getTheaterTerrainHeight(-175, -60, theaterId), z: -60, type: 'military_locker' },
+    { x: 45, y: getTheaterTerrainHeight(45, -95, theaterId), z: -95, type: 'tactical_box' },
+    { x: 110, y: getTheaterTerrainHeight(110, -130, theaterId), z: -130, type: 'air_drop' },
+    { x: 160, y: getTheaterTerrainHeight(160, -75, theaterId), z: -75, type: 'military_locker' },
+    // Outer Zone Bravo (East & West Plateau Ridges: 80m - 220m)
+    { x: -95, y: getTheaterTerrainHeight(-95, 45, theaterId), z: 45, type: 'tactical_box' },
+    { x: -160, y: getTheaterTerrainHeight(-160, 90, theaterId), z: 90, type: 'air_drop' },
+    { x: -230, y: getTheaterTerrainHeight(-230, 20, theaterId), z: 20, type: 'tactical_box' },
+    { x: 85, y: getTheaterTerrainHeight(85, 50, theaterId), z: 50, type: 'tactical_box' },
+    { x: 155, y: getTheaterTerrainHeight(155, 80, theaterId), z: 80, type: 'military_locker' },
+    { x: 210, y: getTheaterTerrainHeight(210, 35, theaterId), z: 35, type: 'air_drop' },
+    // Outer Zone Charlie (South Valleys & Air-Drop Dropzones: 70m - 260m)
+    { x: -40, y: getTheaterTerrainHeight(-40, 110, theaterId), z: 110, type: 'tactical_box' },
+    { x: 40, y: getTheaterTerrainHeight(40, 110, theaterId), z: 110, type: 'tactical_box' },
+    { x: 0, y: getTheaterTerrainHeight(0, 160, theaterId), z: 160, type: 'air_drop' },
+    { x: -105, y: getTheaterTerrainHeight(-105, 180, theaterId), z: 180, type: 'military_locker' },
+    { x: 115, y: getTheaterTerrainHeight(115, 190, theaterId), z: 190, type: 'air_drop' },
+    { x: -180, y: getTheaterTerrainHeight(-180, 220, theaterId), z: 220, type: 'tactical_box' },
+    { x: 190, y: getTheaterTerrainHeight(190, 230, theaterId), z: 230, type: 'military_locker' },
+    { x: 0, y: getTheaterTerrainHeight(0, 280, theaterId), z: 280, type: 'air_drop' },
+    { x: -280, y: getTheaterTerrainHeight(-280, -160, theaterId), z: -160, type: 'air_drop' },
+    { x: 280, y: getTheaterTerrainHeight(280, -170, theaterId), z: -170, type: 'air_drop' },
+  ];
+
+  // --- Tactical Ground Vehicles (Desert Buggy spawns for high-speed vast travel) ---
+  const vehicleSpawns: { x: number; y: number; z: number; rotationY?: number }[] = [
+    { x: 26, y: getTheaterTerrainHeight(26, 24, theaterId), z: 24, rotationY: 0.3 },
+    { x: -32, y: getTheaterTerrainHeight(-32, -22, theaterId), z: -22, rotationY: -1.2 },
+    { x: 110, y: getTheaterTerrainHeight(110, 70, theaterId), z: 70, rotationY: 1.8 },
+    { x: -125, y: getTheaterTerrainHeight(-125, 95, theaterId), z: 95, rotationY: -0.6 },
+  ];
+
   return {
     voxelTerrain,
     colliders,
@@ -492,5 +646,8 @@ export function buildWarTheater(theaterId: WarTheaterId, scene: THREE.Scene, gro
     enemySpawnPoints,
     playerSpawnPoint,
     propsGroup,
+    crateSpawns,
+    vehicleSpawns,
+    getTerrainHeight: (x: number, z: number) => getTheaterTerrainHeight(x, z, theaterId),
   };
 }

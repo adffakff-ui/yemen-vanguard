@@ -13,6 +13,11 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { saveManager } from './game/saveManager';
 import { assetLoader, AssetLoadProgress } from './game/assetLoader.ts';
 import { LoadingScreen } from './components/LoadingScreen.tsx';
+import { WEAPON_REGISTRY } from './game/lootSystem.ts';
+
+import { MapEditorModal } from './components/MapEditorModal.tsx';
+import { CustomMapConfig } from './types/game.ts';
+import { registerCustomTheater } from './game/theater.ts';
 
 export default function App() {
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -22,6 +27,45 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isPreloading, setIsPreloading] = useState(true);
   const [preloadProgress, setPreloadProgress] = useState<AssetLoadProgress | null>(null);
+
+  const [customMaps, setCustomMaps] = useState<CustomMapConfig[]>(() => {
+    try {
+      const saved = localStorage.getItem('yemen_combat_custom_maps');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [customDropZone, setCustomDropZone] = useState<{ x: number; z: number } | null>(null);
+  const [isMapEditorOpen, setIsMapEditorOpen] = useState(false);
+
+  useEffect(() => {
+    customMaps.forEach((map) => registerCustomTheater(map));
+  }, [customMaps]);
+
+  // Dynamic Visual Viewport Handling for Mobile Keyboard/Orientation
+  useEffect(() => {
+    const handleResize = () => {
+      const viewport = window.visualViewport;
+      if (viewport) {
+        document.documentElement.style.setProperty('--vh', `${viewport.height}px`);
+        document.documentElement.style.setProperty('--vw', `${viewport.width}px`);
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+      window.visualViewport.addEventListener('scroll', handleResize);
+      handleResize(); // Initial set
+    }
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+        window.visualViewport.removeEventListener('scroll', handleResize);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     assetLoader.preloadAll((progress) => {
@@ -57,38 +101,8 @@ export default function App() {
     isAiming: false,
     isReloading: false,
     currentWeapon: 'assault',
-    weapons: {
-      assault: {
-        type: 'assault',
-        nameAr: 'بندقية هجومية كاربين',
-        nameEn: 'M4 Tactical Carbine',
-        damage: 32,
-        fireRate: 9,
-        clipSize: 30,
-        currentAmmo: 30,
-        reserveAmmo: 120,
-        reloadTime: 1.8,
-        recoil: 0.04,
-        spread: 0.02,
-        range: 60,
-        zoomFov: 52,
-      },
-      sniper: {
-        type: 'sniper',
-        nameAr: 'بندقية قنص تكتيكية',
-        nameEn: 'Tactical Marksman Sniper',
-        damage: 90,
-        fireRate: 1.2,
-        clipSize: 6,
-        currentAmmo: 6,
-        reserveAmmo: 24,
-        reloadTime: 2.4,
-        recoil: 0.12,
-        spread: 0.005,
-        range: 120,
-        zoomFov: 28,
-      },
-    },
+    unlockedWeapons: ['knife', 'pistol', 'assault', 'sniper'],
+    weapons: { ...WEAPON_REGISTRY },
     grenades: 3,
     score: 0,
     kills: 0,
@@ -215,7 +229,7 @@ export default function App() {
         setDescentStatus(status);
         if (status.isActive) {
           setStatus('descent');
-        } else if (status.phase === 'landing') {
+        } else if (status.phase === 'landing' || status.phase === 'landed') {
           setStatus('playing');
         }
       },
@@ -264,7 +278,7 @@ export default function App() {
   const handleConfirmDeploy = () => {
     setRadioTransmission(null);
     setBossState(null);
-    setStatus('playing');
+    setStatus('descent');
     engineRef.current?.startMission(selectedTheater);
   };
 
@@ -308,7 +322,13 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-black select-none">
+    <div 
+      className="relative overflow-hidden bg-black select-none"
+      style={{
+        width: 'var(--vw, 100vw)',
+        height: 'var(--vh, 100vh)',
+      }}
+    >
       {/* Asset Preloader Loading Screen */}
       {isPreloading && <LoadingScreen progressData={preloadProgress} />}
 
@@ -342,14 +362,35 @@ export default function App() {
         <ReconBriefing
           selectedTheater={selectedTheater}
           onSelectTheater={handleSelectTheater}
+          customMaps={customMaps}
+          customDropZone={customDropZone}
+          onSelectDropZone={(coords) => setCustomDropZone(coords)}
+          onOpenMapEditor={() => setIsMapEditorOpen(true)}
           onConfirmDeploy={handleConfirmDeploy}
           onBackToTitle={handleQuitToTitle}
           lang={lang}
         />
       )}
 
+      {/* Custom Map Builder Modal */}
+      {isMapEditorOpen && (
+        <MapEditorModal
+          onSaveMap={(newMap) => {
+            const next = [...customMaps, newMap];
+            setCustomMaps(next);
+            try {
+              localStorage.setItem('yemen_combat_custom_maps', JSON.stringify(next));
+            } catch {}
+            setSelectedTheater(newMap.id);
+            setIsMapEditorOpen(false);
+          }}
+          onClose={() => setIsMapEditorOpen(false)}
+          lang={lang}
+        />
+      )}
+
       {/* In-Game Low-Occlusion Military HUD */}
-      {(status === 'playing' || status === 'paused') && (
+      {(status === 'playing' || status === 'paused' || status === 'descent') && (
         <HUD
           playerState={playerState}
           theaterId={selectedTheater}
@@ -370,16 +411,20 @@ export default function App() {
           bossState={bossState}
           radioTransmission={radioTransmission}
           onTriggerDrone={() => engineRef.current?.triggerDroneLaunch()}
+          onLoot={() => engineRef.current?.interactLoot()}
+          onDrive={() => engineRef.current?.interactVehicle()}
+          onJump={() => engineRef.current?.jumpDescent()}
           descentStatus={descentStatus}
         />
       )}
 
       {/* On-Screen Touch Controls (Dynamic Floating Joystick & D-Pad) */}
-      {status === 'playing' && showTouchControls && (
+      {(status === 'playing' || status === 'descent') && showTouchControls && (
         <TouchControls
           engine={engineRef.current}
           playerState={playerState}
           lang={lang}
+          descentStatus={descentStatus}
         />
       )}
 

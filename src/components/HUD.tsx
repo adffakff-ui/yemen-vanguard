@@ -3,6 +3,7 @@ import { PlayerState, WarTheaterId, WaveState, BossState, RadioTransmission } fr
 import { WAR_THEATERS } from '../game/theater.ts';
 import { Shield, Heart, Zap, Crosshair, Bomb, Volume2, VolumeX, Globe, Smartphone, Radio, AlertTriangle, Eye, Target, Plane } from 'lucide-react';
 import { soundManager } from '../game/audio.ts';
+import { WEAPON_REGISTRY } from '../game/lootSystem.ts';
 
 interface HUDProps {
   playerState: PlayerState;
@@ -21,6 +22,9 @@ interface HUDProps {
   bossState: BossState | null;
   radioTransmission: RadioTransmission | null;
   onTriggerDrone?: () => void;
+  onLoot?: () => void;
+  onDrive?: () => void;
+  onJump?: () => void;
   descentStatus?: { isActive: boolean; altitude: number; phase: string };
 }
 
@@ -41,12 +45,15 @@ export const HUD: React.FC<HUDProps> = ({
   bossState,
   radioTransmission,
   onTriggerDrone,
+  onLoot,
+  onDrive,
+  onJump,
   descentStatus = { isActive: false, altitude: 0, phase: 'plane' },
 }) => {
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isMuted, setIsMuted] = React.useState(soundManager.getMuted());
   const theater = WAR_THEATERS.find((t) => t.id === theaterId) || WAR_THEATERS[0];
-  const weapon = playerState.weapons[playerState.currentWeapon];
+  const weapon = playerState.weapons[playerState.currentWeapon] || WEAPON_REGISTRY[playerState.currentWeapon] || WEAPON_REGISTRY.assault;
 
   const handleToggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -164,7 +171,7 @@ export const HUD: React.FC<HUDProps> = ({
       />
 
       {/* TOP PERIMETER: Objective Directive, Wave Tracker & Boss Bar, Radar */}
-      <div className="flex flex-wrap sm:flex-nowrap items-start justify-between w-full gap-2 sm:gap-4">
+      <div className={`flex flex-wrap sm:flex-nowrap items-start justify-between w-full gap-2 sm:gap-4 transition-opacity duration-300 ${descentStatus.isActive ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
         {/* Left: Mission Directive (Dynamically fades smoothly during firefights) */}
         <div
           className={`bg-slate-950/85 backdrop-blur-md border border-amber-500/30 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg max-w-[180px] xs:max-w-[220px] sm:max-w-sm shadow-lg shrink hud-adaptive-transition ${
@@ -510,6 +517,143 @@ export const HUD: React.FC<HUDProps> = ({
             <div className="text-xs font-arabic font-bold text-slate-100 mt-0.5 leading-snug">
               {lang === 'ar' ? radioTransmission.textAr : radioTransmission.textEn}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3D WEAPON INSPECTION OVERLAY CARD */}
+      {playerState.isInspecting && (
+        <div className="absolute top-16 left-4 sm:left-6 max-w-xs sm:max-w-sm w-full bg-slate-950/90 border-2 border-amber-500/80 p-3 sm:p-4 rounded-xl shadow-[0_0_35px_rgba(245,158,11,0.35)] backdrop-blur-md pointer-events-auto animate-fade-in z-40">
+          <div className="flex items-center justify-between border-b border-amber-500/30 pb-2 mb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse">
+                <Eye className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-[10px] font-hud font-bold text-amber-400 uppercase tracking-widest">
+                  {lang === 'ar' ? 'فحص السلاح الميداني 3D' : '3D WEAPON INSPECTION'}
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-white font-arabic">
+                  {lang === 'ar' ? weapon.nameAr : weapon.nameEn}
+                </div>
+              </div>
+            </div>
+            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono text-[9px] font-bold border border-emerald-500/40">
+              100% MINT
+            </span>
+          </div>
+
+          {/* Specifications Grid */}
+          <div className="grid grid-cols-2 gap-2 text-[10px] font-hud mb-3">
+            <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+              <div className="text-slate-400">{lang === 'ar' ? 'القوة النارية:' : 'DMG OUTPUT:'}</div>
+              <div className="text-amber-400 font-bold font-mono text-xs">{weapon.damage} HP</div>
+            </div>
+            <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+              <div className="text-slate-400">{lang === 'ar' ? 'معدل الإطلاق:' : 'FIRE RATE:'}</div>
+              <div className="text-emerald-400 font-bold font-mono text-xs">{weapon.fireRate} RPS</div>
+            </div>
+            <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+              <div className="text-slate-400">{lang === 'ar' ? 'المدى القتالي:' : 'EFFECTIVE RANGE:'}</div>
+              <div className="text-cyan-400 font-bold font-mono text-xs">{weapon.range}M</div>
+            </div>
+            <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+              <div className="text-slate-400">{lang === 'ar' ? 'السعة والتذخير:' : 'MAG CAP:'}</div>
+              <div className="text-slate-200 font-bold font-mono text-xs">{weapon.clipSize} RNDS</div>
+            </div>
+          </div>
+
+          {/* Attachments & Camo Details */}
+          <div className="space-y-1 text-[10px] font-hud border-t border-slate-800/80 pt-2 mb-2">
+            <div className="flex justify-between text-slate-300">
+              <span className="text-slate-500">🔭 {lang === 'ar' ? 'منظار التصويب:' : 'OPTIC:'}</span>
+              <span className="font-bold text-amber-300">
+                {playerState.currentWeapon === 'sniper' ? 'ACOG 8X Sniper' : 'Holographic Red Dot'}
+              </span>
+            </div>
+            <div className="flex justify-between text-slate-300">
+              <span className="text-slate-500">⚡ {lang === 'ar' ? 'الفوهة والكاتم:' : 'MUZZLE:'}</span>
+              <span className="font-bold text-emerald-300">Tactical Flash Hider</span>
+            </div>
+            <div className="flex justify-between text-slate-300">
+              <span className="text-slate-500">🎨 {lang === 'ar' ? 'تمويه السلاح:' : 'CAMO FINISH:'}</span>
+              <span className="font-bold text-cyan-300">Marib Sabir Desert Camo</span>
+            </div>
+          </div>
+
+          {/* Close instruction */}
+          <div className="text-[9px] font-hud text-slate-400 text-center pt-1 border-t border-slate-800/50">
+            {lang === 'ar' ? 'اضغط [N] أو زر الفحص باللمس للخروج' : 'Press [N / I] or Tap Inspect button to exit view'}
+          </div>
+        </div>
+      )}
+
+      {/* INTERACTIVE BATTLE ROYALE LOOT CACHE PROMPT (Free Fire / Battle Royale Style) */}
+      {playerState.nearbyLoot && !playerState.isInVehicle && (
+        <div className="mx-auto mb-3 max-w-sm w-full animate-bounce pointer-events-auto">
+          <div className="bg-slate-950/95 border-2 border-amber-500 rounded-xl p-3 shadow-[0_0_30px_rgba(245,158,11,0.5)] backdrop-blur-md flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs shadow-inner ${
+                playerState.nearbyLoot.item.tier === 'legendary'
+                  ? 'bg-gradient-to-tr from-amber-600 to-yellow-400 text-slate-950 border border-yellow-200'
+                  : playerState.nearbyLoot.item.tier === 'epic'
+                  ? 'bg-gradient-to-tr from-purple-700 to-indigo-500 text-white border border-purple-300'
+                  : playerState.nearbyLoot.item.tier === 'rare'
+                  ? 'bg-gradient-to-tr from-cyan-600 to-sky-400 text-slate-950 border border-cyan-200'
+                  : 'bg-slate-800 text-slate-200 border border-slate-700'
+              }`}>
+                {playerState.nearbyLoot.item.type === 'weapon' ? '🔫' : playerState.nearbyLoot.item.type === 'armor' ? '🛡️' : '📦'}
+              </div>
+              <div>
+                <div className="text-[10px] font-hud font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>{playerState.nearbyLoot.item.tier?.toUpperCase()}</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-slate-300">{lang === 'ar' ? 'صندوق عتاد تكتيكي' : 'TACTICAL CRATE'}</span>
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-white font-arabic">
+                  {lang === 'ar' ? playerState.nearbyLoot.item.nameAr : playerState.nearbyLoot.item.nameEn}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={onLoot}
+              className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-95 text-slate-950 font-black font-hud text-xs rounded-lg shadow-lg cursor-pointer flex items-center gap-1.5 transition-transform"
+            >
+              <span className="px-1.5 py-0.5 bg-slate-950/30 rounded text-[10px] font-mono">E</span>
+              <span>{lang === 'ar' ? 'التقط' : 'TAKE'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TACTICAL VEHICLE PROMPT (Mount / Dismount Buggy) */}
+      {(playerState.nearbyVehicle || playerState.isInVehicle) && (
+        <div className="mx-auto mb-3 max-w-sm w-full animate-fade-in pointer-events-auto">
+          <div className="bg-slate-950/95 border-2 border-emerald-500 rounded-xl p-3 shadow-[0_0_25px_rgba(16,185,129,0.45)] backdrop-blur-md flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-lg bg-emerald-600/30 border border-emerald-500/50 flex items-center justify-center text-emerald-400 text-lg">
+                🏎️
+              </div>
+              <div>
+                <div className="text-[10px] font-hud font-bold text-emerald-400 uppercase tracking-wider">
+                  {lang === 'ar' ? 'عربة استطلاع تكتيكية (Buggy)' : 'TACTICAL RECON BUGGY'}
+                </div>
+                <div className="text-xs font-hud text-slate-300">
+                  {playerState.isInVehicle
+                    ? (lang === 'ar' ? 'السرعة: 130 كم/س • [F] ترجل' : 'Speed: 130 km/h • [F] Dismount')
+                    : (lang === 'ar' ? 'جاهزة للقيادة عبر التضاريس' : 'Ready for vast terrain traversal')}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={onDrive}
+              className="px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 active:scale-95 text-slate-950 font-black font-hud text-xs rounded-lg shadow-lg cursor-pointer flex items-center gap-1.5 transition-transform"
+            >
+              <span className="px-1.5 py-0.5 bg-slate-950/30 rounded text-[10px] font-mono">F</span>
+              <span>{playerState.isInVehicle ? (lang === 'ar' ? 'ترجل' : 'EXIT') : (lang === 'ar' ? 'اركب' : 'DRIVE')}</span>
+            </button>
           </div>
         </div>
       )}

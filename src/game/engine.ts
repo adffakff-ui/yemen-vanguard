@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { WarTheaterId, PlayerState, GameStats, WeaponType, WaveState, BossState, RadioTransmission, TacticalDroneState, TacticalDroneTarget } from '../types/game.ts';
-import { WAR_THEATERS, buildWarTheater, TheaterBuildResult, DestructiblePropObject } from './theater.ts';
+import { WarTheaterId, PlayerState, GameStats, WeaponType, WaveState, BossState, RadioTransmission, TacticalDroneState, TacticalDroneTarget, LootCrateEntity, TacticalVehicleEntity } from '../types/game.ts';
+import { WAR_THEATERS, buildWarTheater, TheaterBuildResult, DestructiblePropObject, getTheaterTerrainHeight } from './theater.ts';
 import { createCommandoModel, CommandoModel, createArmoredBossVehicle, ArmoredBossModel, createTacticalPickupMesh, createDroneModel, TacticalDroneModel, resetSharedTextures, createTransportPlaneModel, createParachuteModel } from './models.ts';
 import { EnemySystem } from './ai.ts';
 import { soundManager } from './audio.ts';
-import { DescentSystem } from './descent.ts';
+import { DescentSystem, LandedParatrooperData } from './descent.ts';
+import { LootSystem, WEAPON_REGISTRY } from './lootSystem.ts';
 
 export interface TacticalDrop {
   id: string;
@@ -70,9 +71,12 @@ export class YemenCombatEngine {
   private theaterData: TheaterBuildResult | null = null;
   private playerModel!: CommandoModel;
   private enemySystem!: EnemySystem;
+  public lootSystem!: LootSystem;
   private descentSystem!: DescentSystem;
   private isDescentMode = false;
-  private subscriberCount = 8; // Default value, will be fetched or randomized
+  private subscriberCount = 12; // Paratrooper squad count
+  private currentVehicle: TacticalVehicleEntity | null = null;
+  private vehicleSpeed = 0;
 
   // Multi-Wave System & Armored Boss State
   private currentWave = 1;
@@ -150,6 +154,8 @@ export class YemenCombatEngine {
   private currentWeapon: WeaponType = 'assault';
   private shootCooldown = 0;
   private reloadTimer = 0;
+  private isInspecting = false;
+  private inspectTimer = 0;
 
   private playerStats: PlayerState = {
     health: 100,
@@ -163,39 +169,18 @@ export class YemenCombatEngine {
     isAiming: false,
     isReloading: false,
     currentWeapon: 'assault',
+    unlockedWeapons: ['knife', 'pistol', 'assault', 'sniper'],
     weapons: {
-      assault: {
-        type: 'assault',
-        nameAr: 'بندقية هجومية كاربين',
-        nameEn: 'M4 Tactical Carbine',
-        damage: 32,
-        fireRate: 9, // 9 shots / sec
-        clipSize: 30,
-        currentAmmo: 30,
-        reserveAmmo: 120,
-        reloadTime: 1.8,
-        recoil: 0.04,
-        spread: 0.02,
-        range: 60,
-        zoomFov: 52,
-      },
-      sniper: {
-        type: 'sniper',
-        nameAr: 'بندقية قنص تكتيكية',
-        nameEn: 'Tactical Marksman Sniper',
-        damage: 90,
-        fireRate: 1.2,
-        clipSize: 6,
-        currentAmmo: 6,
-        reserveAmmo: 24,
-        reloadTime: 2.4,
-        recoil: 0.12,
-        spread: 0.005,
-        range: 120,
-        zoomFov: 28,
-      },
+      knife: { ...WEAPON_REGISTRY.knife },
+      pistol: { ...WEAPON_REGISTRY.pistol },
+      assault: { ...WEAPON_REGISTRY.assault },
+      sniper: { ...WEAPON_REGISTRY.sniper },
+      shotgun: { ...WEAPON_REGISTRY.shotgun },
+      lmg: { ...WEAPON_REGISTRY.lmg },
     },
     grenades: 3,
+    medkits: 2,
+    armorPlates: 3,
     score: 0,
     kills: 0,
     shotsFired: 0,
@@ -203,6 +188,7 @@ export class YemenCombatEngine {
     headshots: 0,
     missionTime: 0,
     isInCombat: false,
+    isDescentMode: false,
   };
 
   private combatTimer = 0;
@@ -229,15 +215,43 @@ export class YemenCombatEngine {
     this.initScene();
     this.initInputs();
     this.initPooledAssets();
-    this.descentSystem = new DescentSystem(this.scene, this.playerModel, () => {
-      this.isDescentMode = false;
-      this.broadcastRadio(
-        'تم تأكيد الهبوط التكتيكي. طهّر المنطقة فوراً!',
-        'Landing confirmed. Secure the area immediately!'
-      );
-    });
+    this.lootSystem = new LootSystem(this.scene);
+    this.descentSystem = new DescentSystem(
+      this.scene,
+      this.playerModel,
+      (x, z) => this.getTerrainHeight(x, z),
+      (landingPos, landedBots) => this.handleParatroopersTouchdown(landingPos, landedBots)
+    );
     this.loadTheater('sanaa');
     this.startLoop();
+  }
+
+  public getTerrainHeight(x: number, z: number): number {
+    if (this.theaterData) {
+      return this.theaterData.getTerrainHeight(x, z);
+    }
+    return getTheaterTerrainHeight(x, z, this.currentTheaterId);
+  }
+
+  private handleParatroopersTouchdown(landingPos: THREE.Vector3, landedBots: LandedParatrooperData[]) {
+    this.isDescentMode = false;
+    this.playerPos.copy(landingPos);
+    this.playerModel.root.position.copy(landingPos);
+
+    // Landed paratroopers disperse to scavenge weapon caches across the battlefield!
+    this.enemySystem.spawnParatrooperScavengers(landedBots, this.lootSystem);
+    this.callbacks.onEnemiesUpdate(landedBots.length, landedBots.length);
+
+    soundManager.playParachuteDeploy();
+    this.broadcastRadio(
+      'تم تأكيد الهبوط المظلي! تفرقت القوات للبحث عن الأسلحة وصناديق العتاد في الميدان!',
+      'Airborne touchdown confirmed! Hostile paratroopers dispersed to scavenge weapon caches!'
+    );
+    this.callbacks.onDescentUpdate({
+      isActive: false,
+      altitude: 0,
+      phase: 'landing',
+    });
   }
 
   private initWebGL() {
@@ -514,6 +528,9 @@ export class YemenCombatEngine {
     const groundColorStr = '#' + config.groundColor.toString(16).padStart(6, '0');
     this.theaterData = buildWarTheater(theaterId, this.scene, this.groundTextureCache[groundColorStr]);
 
+    // Populate distributed weapon caches and tactical vehicles across vast theater
+    this.lootSystem.populateWorldCrates(this.theaterData.crateSpawns, this.theaterData.vehicleSpawns);
+
     this.playerPos.copy(this.theaterData.playerSpawnPoint);
     this.playerModel.root.position.copy(this.playerPos);
 
@@ -574,8 +591,12 @@ export class YemenCombatEngine {
         true
       );
       // Ammo resupply bonus
-      this.playerStats.weapons.assault.reserveAmmo = Math.min(180, this.playerStats.weapons.assault.reserveAmmo + 60);
-      this.playerStats.weapons.sniper.reserveAmmo = Math.min(36, this.playerStats.weapons.sniper.reserveAmmo + 12);
+      if (this.playerStats.weapons.assault) {
+        this.playerStats.weapons.assault.reserveAmmo = Math.min(180, this.playerStats.weapons.assault.reserveAmmo + 60);
+      }
+      if (this.playerStats.weapons.sniper) {
+        this.playerStats.weapons.sniper.reserveAmmo = Math.min(36, this.playerStats.weapons.sniper.reserveAmmo + 12);
+      }
       this.playerStats.grenades = Math.min(4, this.playerStats.grenades + 2);
       this.callbacks.onPlayerUpdate({ ...this.playerStats });
     } else if (waveNumber === 3) {
@@ -683,10 +704,14 @@ export class YemenCombatEngine {
     this.playerStats.shotsHit = 0;
     this.playerStats.headshots = 0;
     this.playerStats.missionTime = 0;
-    this.playerStats.weapons.assault.currentAmmo = 30;
-    this.playerStats.weapons.assault.reserveAmmo = 120;
-    this.playerStats.weapons.sniper.currentAmmo = 6;
-    this.playerStats.weapons.sniper.reserveAmmo = 24;
+    if (this.playerStats.weapons.assault) {
+      this.playerStats.weapons.assault.currentAmmo = 30;
+      this.playerStats.weapons.assault.reserveAmmo = 120;
+    }
+    if (this.playerStats.weapons.sniper) {
+      this.playerStats.weapons.sniper.currentAmmo = 6;
+      this.playerStats.weapons.sniper.reserveAmmo = 24;
+    }
 
     // Start Paratrooping phase
     this.isDescentMode = true;
@@ -755,12 +780,32 @@ export class YemenCombatEngine {
         this.switchWeapon('assault');
       } else if (e.code === 'Digit2') {
         this.switchWeapon('sniper');
+      } else if (e.code === 'Digit3') {
+        this.switchWeapon('shotgun');
+      } else if (e.code === 'Digit4') {
+        this.switchWeapon('lmg');
+      } else if (e.code === 'Digit5') {
+        this.switchWeapon('pistol');
+      } else if (e.code === 'Digit6') {
+        this.switchWeapon('knife');
       } else if (e.code === 'KeyG') {
         this.throwGrenade();
       } else if (e.code === 'KeyE') {
-        this.triggerDroneLaunch();
+        if (this.playerStats.nearbyLoot) {
+          this.interactLoot();
+        } else {
+          this.triggerDroneLaunch();
+        }
+      } else if (e.code === 'KeyF') {
+        if (this.currentVehicle || this.playerStats.nearbyVehicle) {
+          this.interactVehicle();
+        } else if (this.playerStats.nearbyLoot) {
+          this.interactLoot();
+        }
       } else if (e.code === 'KeyQ' || e.code === 'KeyZ') {
         this.toggleAim();
+      } else if (e.code === 'KeyN' || e.code === 'KeyI') {
+        this.triggerInspectWeapon();
       } else if (e.code === 'Space' && this.isDescentMode) {
         this.descentSystem.jump();
       }
@@ -829,7 +874,7 @@ export class YemenCombatEngine {
     });
   }
 
-  private switchWeapon(type: WeaponType) {
+  public switchWeapon(type: WeaponType) {
     if (this.currentWeapon === type || this.reloadTimer > 0) return;
     this.currentWeapon = type;
     this.playerStats.currentWeapon = type;
@@ -837,9 +882,82 @@ export class YemenCombatEngine {
     this.callbacks.onPlayerUpdate({ ...this.playerStats });
   }
 
+  public cycleNextWeapon() {
+    const list = this.playerStats.unlockedWeapons || ['assault', 'sniper'];
+    const idx = list.indexOf(this.currentWeapon);
+    const nextType = list[(idx + 1) % list.length];
+    this.switchWeapon(nextType);
+  }
+
+  public interactLoot(): boolean {
+    if (!this.playerStats.nearbyLoot) return false;
+    const ok = this.lootSystem.lootCrate(
+      this.playerStats.nearbyLoot.id,
+      this.playerStats,
+      (ar, en) => this.broadcastRadio(ar, en)
+    );
+    if (ok) {
+      this.playerStats.nearbyLoot = this.lootSystem.checkNearbyLoot(this.playerPos);
+      this.currentWeapon = this.playerStats.currentWeapon;
+      this.callbacks.onPlayerUpdate({ ...this.playerStats });
+    }
+    return ok;
+  }
+
+  public interactVehicle(): boolean {
+    if (this.currentVehicle) {
+      // Dismount buggy
+      this.currentVehicle.isOccupied = false;
+      this.playerPos.x += Math.cos(this.currentVehicle.rotationY) * 2.2;
+      this.playerPos.z -= Math.sin(this.currentVehicle.rotationY) * 2.2;
+      this.playerPos.y = this.getTerrainHeight(this.playerPos.x, this.playerPos.z);
+      this.currentVehicle = null;
+      this.playerStats.isInVehicle = false;
+      this.callbacks.onPlayerUpdate({ ...this.playerStats });
+      this.broadcastRadio('ترجلت من المركبة التكتيكية.', 'Dismounted tactical buggy.');
+      return true;
+    } else if (this.playerStats.nearbyVehicle) {
+      // Mount buggy
+      this.currentVehicle = this.playerStats.nearbyVehicle;
+      this.currentVehicle.isOccupied = true;
+      this.playerStats.isInVehicle = true;
+      this.callbacks.onPlayerUpdate({ ...this.playerStats });
+      this.broadcastRadio('ركبت المركبة التكتيكية! اضغط [W / F] للقيادة والترجل.', 'Mounted tactical buggy! Drive with [WASD], [F] to exit.');
+      return true;
+    }
+    return false;
+  }
+
+  public jumpDescent() {
+    if (this.isDescentMode) {
+      this.descentSystem.jump();
+    }
+  }
+
+  public triggerInspectWeapon() {
+    if (this.isDescentMode || this.currentVehicle || this.isTitleMode) return;
+
+    this.isInspecting = !this.isInspecting;
+    if (this.isInspecting) {
+      this.inspectTimer = 3.2; // 3.2s 3D rotation inspection cycle
+      soundManager.playWeaponInspectSound();
+      this.broadcastRadio(
+        'جاري فحص العتاد التكتيكي ونسبة جاهزية السلاح والملحقات.',
+        'Inspecting weapon condition, attachments & tactical wear.'
+      );
+    } else {
+      this.inspectTimer = 0;
+      this.playerModel.weaponGroup.rotation.set(0, 0, 0);
+    }
+
+    this.playerStats.isInspecting = this.isInspecting;
+    this.playerStats.inspectProgress = 0;
+    this.callbacks.onPlayerUpdate({ ...this.playerStats });
+  }
+
   private startReload() {
-    const w = this.playerStats.weapons[this.currentWeapon];
-    if (w.currentAmmo >= w.clipSize || w.reserveAmmo <= 0 || this.reloadTimer > 0) return;
+    const w = this.playerStats.weapons[this.currentWeapon] || WEAPON_REGISTRY[this.currentWeapon];
+    if (!w || w.currentAmmo >= w.clipSize || w.reserveAmmo <= 0 || this.reloadTimer > 0) return;
 
     this.reloadTimer = w.reloadTime;
     this.playerStats.isReloading = true;
@@ -878,7 +996,8 @@ export class YemenCombatEngine {
 
   private handlePlayerShooting(dt: number) {
     this.shootCooldown -= dt;
-    const weapon = this.playerStats.weapons[this.currentWeapon];
+    const weapon = this.playerStats.weapons[this.currentWeapon] || WEAPON_REGISTRY[this.currentWeapon];
+    if (!weapon) return;
 
     if (this.reloadTimer > 0) {
       this.reloadTimer -= dt;
@@ -1326,108 +1445,178 @@ export class YemenCombatEngine {
     _v1.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize(); // Forward
     _v2.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).normalize(); // Right
     const moveDir = _v3.set(0, 0, 0);
-
-    if (this.keysHeld['KeyW'] || this.keysHeld['ArrowUp']) moveDir.add(_v1);
-    if (this.keysHeld['KeyS'] || this.keysHeld['ArrowDown']) moveDir.sub(_v1);
-    if (this.keysHeld['KeyD'] || this.keysHeld['ArrowRight']) moveDir.add(_v2);
-    if (this.keysHeld['KeyA'] || this.keysHeld['ArrowLeft']) moveDir.sub(_v2);
-
-    // Apply touch movement from D-Pad or Floating Analog Joystick (forward is -z, right is +x)
-    if (this.touchMoveVector.z !== 0) {
-      moveDir.addScaledVector(_v1, -this.touchMoveVector.z);
-    }
-    if (this.touchMoveVector.x !== 0) {
-      moveDir.addScaledVector(_v2, this.touchMoveVector.x);
-    }
-
-    const touchMagnitude = Math.hypot(this.touchMoveVector.x, this.touchMoveVector.z);
-    const isMoving = moveDir.lengthSq() > 0.001;
-    if (isMoving) {
-      if (touchMagnitude > 0.05 && touchMagnitude < 0.99) {
-        moveDir.normalize().multiplyScalar(touchMagnitude);
-      } else {
-        moveDir.normalize();
-      }
-    }
-
-    // Stance: Crouch / Sprint / Dodge Roll
-    const isShift = this.keysHeld['ShiftLeft'] || this.keysHeld['ShiftRight'] || this.touchIsSprinting;
-    const isCtrl = this.keysHeld['KeyC'] || this.keysHeld['ControlLeft'] || this.touchIsCrouching;
-    
-    const prevAiming = this.isAiming;
-    this.isAiming = this.isRightMouseDown || this.touchIsAiming || this.aimToggleActive;
-    this.playerStats.isAiming = this.isAiming;
-
-    if (!prevAiming && this.isAiming) {
-      this.snapToNearestTarget();
-    } else if (prevAiming && !this.isAiming) {
-      this.clearAimLock();
-    }
-
-    // Space: Tactical Combat Roll / Dodge
-    if (this.keysJustPressed['Space'] && this.rollTimer <= 0 && isMoving) {
-      this.rollTimer = 0.55;
-      soundManager.playDodgeRoll();
-      this.playerStats.stamina = Math.max(0, this.playerStats.stamina - 20);
-    }
-
+    let isMoving = false;
     let speed = 4.5;
-    if (this.rollTimer > 0) {
-      this.rollTimer -= dt;
-      this.playerStance = 'roll';
-      speed = 9.0;
-    } else if (isCtrl) {
-      this.playerStance = 'crouch';
-      speed = 2.4;
-    } else if (isShift && isMoving && !this.isAiming && this.playerStats.stamina > 10) {
-      this.playerStance = 'sprint';
-      speed = 7.2;
-      this.playerStats.stamina = Math.max(0, this.playerStats.stamina - dt * 15);
-    } else {
-      this.playerStance = this.isAiming ? 'aim' : 'stand';
-      this.playerStats.stamina = Math.min(100, this.playerStats.stamina + dt * 20);
-    }
 
-    this.playerStats.isSprinting = this.playerStance === 'sprint';
-    this.playerStats.isCrouching = this.playerStance === 'crouch';
+    // VEHICLE DRIVING CONTROLS OR ON-FOOT MOVEMENT
+    if (this.currentVehicle) {
+      // Driving Tactical Buggy Mode!
+      const steerInput = (this.keysHeld['KeyA'] || this.keysHeld['ArrowLeft'] || this.touchMoveVector.x < -0.2) ? -1 :
+                         (this.keysHeld['KeyD'] || this.keysHeld['ArrowRight'] || this.touchMoveVector.x > 0.2) ? 1 : 0;
+      const throttleInput = (this.keysHeld['KeyW'] || this.keysHeld['ArrowUp'] || this.touchMoveVector.z < -0.2) ? 1 :
+                            (this.keysHeld['KeyS'] || this.keysHeld['ArrowDown'] || this.touchMoveVector.z > 0.2) ? -0.5 : 0;
 
-    // Velocity update
-    this.playerVelocity.copy(moveDir).multiplyScalar(speed);
-    const nextPos = this.playerPos.clone().addScaledVector(this.playerVelocity, dt);
-
-    // World collision check (against props and natural perimeter cliffs)
-    if (this.theaterData) {
-      const playerRadius = 0.5;
-      let collides = false;
-
-      // Keep within arena radius
-      if (Math.hypot(nextPos.x, nextPos.z) > 52) {
-        collides = true;
+      // Smooth vehicle steering & acceleration
+      this.currentVehicle.rotationY -= steerInput * 2.2 * dt;
+      if (throttleInput !== 0) {
+        this.vehicleSpeed = THREE.MathUtils.damp(this.vehicleSpeed, throttleInput * this.currentVehicle.maxSpeed, 4, dt);
+      } else {
+        this.vehicleSpeed = THREE.MathUtils.damp(this.vehicleSpeed, 0, 2.5, dt);
       }
 
-      for (const c of this.theaterData.colliders) {
-        if (c.box.distanceToPoint(nextPos) < playerRadius) {
-          collides = true;
-          break;
+      this.currentVehicle.speed = this.vehicleSpeed;
+      this.currentVehicle.x += Math.sin(this.currentVehicle.rotationY) * this.vehicleSpeed * dt;
+      this.currentVehicle.z += Math.cos(this.currentVehicle.rotationY) * this.vehicleSpeed * dt;
+      this.currentVehicle.y = this.getTerrainHeight(this.currentVehicle.x, this.currentVehicle.z);
+
+      // Boundary clamp
+      if (Math.hypot(this.currentVehicle.x, this.currentVehicle.z) > 460) {
+        this.vehicleSpeed = 0;
+      }
+
+      const buggyMesh = this.lootSystem.getVehicleMesh(this.currentVehicle.id);
+      if (buggyMesh) {
+        buggyMesh.position.set(this.currentVehicle.x, this.currentVehicle.y, this.currentVehicle.z);
+        buggyMesh.rotation.y = this.currentVehicle.rotationY;
+      }
+
+      // Position player inside buggy cockpit
+      this.playerPos.set(this.currentVehicle.x, this.currentVehicle.y + 0.35, this.currentVehicle.z);
+      this.playerModel.root.position.copy(this.playerPos);
+      this.playerModel.root.rotation.y = this.currentVehicle.rotationY;
+      this.playerModel.setAnimation('idle', 0);
+
+      // Check dismount
+      if (this.keysJustPressed['KeyF']) {
+        this.interactVehicle();
+      }
+    } else {
+      // ON-FOOT COMMANDO MOVEMENT
+      if (this.keysHeld['KeyW'] || this.keysHeld['ArrowUp']) moveDir.add(_v1);
+      if (this.keysHeld['KeyS'] || this.keysHeld['ArrowDown']) moveDir.sub(_v1);
+      if (this.keysHeld['KeyD'] || this.keysHeld['ArrowRight']) moveDir.add(_v2);
+      if (this.keysHeld['KeyA'] || this.keysHeld['ArrowLeft']) moveDir.sub(_v2);
+
+      // Apply touch movement from D-Pad or Floating Analog Joystick (forward is -z, right is +x)
+      if (this.touchMoveVector.z !== 0) {
+        moveDir.addScaledVector(_v1, -this.touchMoveVector.z);
+      }
+      if (this.touchMoveVector.x !== 0) {
+        moveDir.addScaledVector(_v2, this.touchMoveVector.x);
+      }
+
+      const touchMagnitude = Math.hypot(this.touchMoveVector.x, this.touchMoveVector.z);
+      isMoving = moveDir.lengthSq() > 0.001;
+      if (isMoving) {
+        if (touchMagnitude > 0.05 && touchMagnitude < 0.99) {
+          moveDir.normalize().multiplyScalar(touchMagnitude);
+        } else {
+          moveDir.normalize();
         }
       }
 
-      if (!collides) {
-        this.playerPos.copy(nextPos);
+      // Stance: Crouch / Sprint / Dodge Roll
+      const isShift = this.keysHeld['ShiftLeft'] || this.keysHeld['ShiftRight'] || this.touchIsSprinting;
+      const isCtrl = this.keysHeld['KeyC'] || this.keysHeld['ControlLeft'] || this.touchIsCrouching;
+      
+      const prevAiming = this.isAiming;
+      this.isAiming = this.isRightMouseDown || this.touchIsAiming || this.aimToggleActive;
+      this.playerStats.isAiming = this.isAiming;
+
+      if (!prevAiming && this.isAiming) {
+        this.snapToNearestTarget();
+      } else if (prevAiming && !this.isAiming) {
+        this.clearAimLock();
       }
+
+      // Space: Tactical Combat Roll / Dodge
+      if (this.keysJustPressed['Space'] && this.rollTimer <= 0 && isMoving) {
+        this.rollTimer = 0.55;
+        soundManager.playDodgeRoll();
+        this.playerStats.stamina = Math.max(0, this.playerStats.stamina - 20);
+      }
+
+      speed = 4.5;
+      if (this.rollTimer > 0) {
+        this.rollTimer -= dt;
+        this.playerStance = 'roll';
+        speed = 9.0;
+      } else if (isCtrl) {
+        this.playerStance = 'crouch';
+        speed = 2.4;
+      } else if (isShift && isMoving && !this.isAiming && this.playerStats.stamina > 10) {
+        this.playerStance = 'sprint';
+        speed = 7.6;
+        this.playerStats.stamina = Math.max(0, this.playerStats.stamina - dt * 15);
+      } else {
+        this.playerStance = this.isAiming ? 'aim' : 'stand';
+        this.playerStats.stamina = Math.min(100, this.playerStats.stamina + dt * 20);
+      }
+
+      this.playerStats.isSprinting = this.playerStance === 'sprint';
+      this.playerStats.isCrouching = this.playerStance === 'crouch';
+
+      // Velocity update
+      this.playerVelocity.copy(moveDir).multiplyScalar(speed);
+      const nextPos = this.playerPos.clone().addScaledVector(this.playerVelocity, dt);
+
+      // World collision check (against props and vast 460m natural perimeter)
+      if (this.theaterData) {
+        const playerRadius = 0.5;
+        let collides = false;
+
+        // Keep within vast battle royale arena radius (460m)
+        if (Math.hypot(nextPos.x, nextPos.z) > 460) {
+          collides = true;
+        }
+
+        for (const c of this.theaterData.colliders) {
+          if (c.box.distanceToPoint(nextPos) < playerRadius) {
+            collides = true;
+            break;
+          }
+        }
+
+        if (!collides) {
+          this.playerPos.copy(nextPos);
+        }
+      }
+
+      // Elevate player to follow terrain rolling hills
+      this.playerPos.y = this.getTerrainHeight(this.playerPos.x, this.playerPos.z);
+      this.playerModel.root.position.copy(this.playerPos);
+
+      // Proximity check for unlooted weapon crates and buggies
+      const nearbyCrate = this.lootSystem.checkNearbyLoot(this.playerPos);
+      const prevCrateId = this.playerStats.nearbyLoot?.id;
+      this.playerStats.nearbyLoot = nearbyCrate;
+
+      const nearbyVehicle = this.lootSystem.checkNearbyVehicle(this.playerPos);
+      const prevVehicleId = this.playerStats.nearbyVehicle?.id;
+      this.playerStats.nearbyVehicle = nearbyVehicle;
+
+      if (prevCrateId !== nearbyCrate?.id || prevVehicleId !== nearbyVehicle?.id) {
+        this.callbacks.onPlayerUpdate({ ...this.playerStats });
+      }
+
+      if (nearbyCrate && (this.keysJustPressed['KeyE'] || this.keysJustPressed['KeyF'])) {
+        this.interactLoot();
+      } else if (nearbyVehicle && this.keysJustPressed['KeyF']) {
+        this.interactVehicle();
+      }
+
+      // Apply Tactical Aim Assist (Magnetic pull towards targets when aiming)
+      this.applyAimAssist(dt);
     }
-
-    this.playerModel.root.position.copy(this.playerPos);
-
-    // Apply Tactical Aim Assist (Magnetic pull towards targets when aiming)
-    this.applyAimAssist(dt);
 
     // Character rotation facing aim direction
     this.playerModel.root.rotation.y = this.yaw + Math.PI;
 
     // Character model animation
     this.animTimer += dt;
-    if (this.playerStance === 'roll') {
+    if (this.currentVehicle) {
+      this.playerModel.setAnimation('idle', 0);
+    } else if (this.playerStance === 'roll') {
       this.playerModel.setAnimation('roll', 1 - this.rollTimer / 0.55);
     } else if (this.isAiming) {
       this.playerModel.setAnimation('aim', 0);
@@ -1444,13 +1633,46 @@ export class YemenCombatEngine {
       this.playerModel.setAnimation('idle', this.animTimer);
     }
 
-    // Shooting
-    this.handlePlayerShooting(dt);
+    // Shooting (disabled while driving buggy)
+    if (!this.currentVehicle) {
+      this.handlePlayerShooting(dt);
+    }
+
+    // In-Hand 3D Weapon Inspection Logic
+    if (this.isInspecting) {
+      this.inspectTimer -= dt;
+      if (this.inspectTimer <= 0 || this.isMouseDown || isMoving) {
+        this.isInspecting = false;
+        this.inspectTimer = 0;
+        this.playerModel.weaponGroup.rotation.set(0, 0, 0);
+        this.playerStats.isInspecting = false;
+        this.callbacks.onPlayerUpdate({ ...this.playerStats });
+      } else {
+        const inspectCycle = (3.2 - this.inspectTimer) / 3.2;
+        this.playerModel.weaponGroup.rotation.y = Math.sin(inspectCycle * Math.PI * 2) * 0.95;
+        this.playerModel.weaponGroup.rotation.z = Math.cos(inspectCycle * Math.PI) * 0.4;
+        this.playerStats.isInspecting = true;
+        this.playerStats.inspectProgress = inspectCycle;
+      }
+    } else {
+      this.playerModel.weaponGroup.rotation.set(0, 0, 0);
+    }
 
     // Third-person camera choreography with smooth exponential damping
-    const targetDistance = this.isAiming ? 2.2 : this.cameraDistance;
-    const targetFov = this.isAiming
-      ? this.playerStats.weapons[this.currentWeapon].zoomFov
+    const currentW = this.playerStats.weapons[this.currentWeapon] || WEAPON_REGISTRY[this.currentWeapon];
+    const targetDistance = this.isInspecting
+      ? 1.65
+      : this.isAiming
+      ? 2.2
+      : this.currentVehicle
+      ? 6.5
+      : this.cameraDistance;
+    const targetFov = this.isInspecting
+      ? 42
+      : this.isAiming
+      ? currentW
+        ? currentW.zoomFov
+        : 52
       : 60;
 
     this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 12, dt);
@@ -1527,7 +1749,7 @@ export class YemenCombatEngine {
       this.camera.updateProjectionMatrix();
     }
 
-    // Update AI Squad
+    // Update AI Squad (with paratrooper scavengers seeking weapon caches)
     this.enemySystem.update(dt, this.playerPos, (from, dir, dmg) => {
       // Enemy fired bullet
       const tracerGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.8, 4);
@@ -1545,7 +1767,7 @@ export class YemenCombatEngine {
         isPlayer: false,
         life: 0.8,
       });
-    });
+    }, this.lootSystem);
 
     // Update Projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -1676,8 +1898,12 @@ export class YemenCombatEngine {
         soundManager.playLootPickupSound();
 
         if (drop.type === 'ammo') {
-          this.playerStats.weapons.assault.reserveAmmo = Math.min(180, this.playerStats.weapons.assault.reserveAmmo + 30);
-          this.playerStats.weapons.sniper.reserveAmmo = Math.min(36, this.playerStats.weapons.sniper.reserveAmmo + 6);
+          if (this.playerStats.weapons.assault) {
+            this.playerStats.weapons.assault.reserveAmmo = Math.min(180, this.playerStats.weapons.assault.reserveAmmo + 30);
+          }
+          if (this.playerStats.weapons.sniper) {
+            this.playerStats.weapons.sniper.reserveAmmo = Math.min(36, this.playerStats.weapons.sniper.reserveAmmo + 6);
+          }
           this.broadcastRadio(
             'تم التقاط ذخيرة تكتيكية إضافية (+30 رصاصة)',
             'Tactical ammo cache collected (+30 rounds)'
@@ -2181,6 +2407,30 @@ export class YemenCombatEngine {
 
   public getIsCrouching(): boolean {
     return this.touchIsCrouching;
+  }
+
+  public useMedkit() {
+    if (this.playerStats.medkits && this.playerStats.medkits > 0 && this.playerStats.health < this.playerStats.maxHealth) {
+      this.playerStats.medkits -= 1;
+      this.playerStats.health = Math.min(this.playerStats.maxHealth, this.playerStats.health + 50);
+      soundManager.playMedkitUseSound();
+      this.callbacks.onPlayerUpdate({ ...this.playerStats });
+    }
+  }
+
+  public useArmorPlate() {
+    if (this.playerStats.armorPlates && this.playerStats.armorPlates > 0 && this.playerStats.armor < this.playerStats.maxArmor) {
+      this.playerStats.armorPlates -= 1;
+      this.playerStats.armor = Math.min(this.playerStats.maxArmor, this.playerStats.armor + 50);
+      soundManager.playArmorPlateSound();
+      this.callbacks.onPlayerUpdate({ ...this.playerStats });
+    }
+  }
+
+  public triggerParachuteToggle() {
+    if (this.isDescentMode && this.descentSystem) {
+      this.descentSystem.jump();
+    }
   }
 
   public getIsAiming(): boolean {

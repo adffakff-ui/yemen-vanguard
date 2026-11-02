@@ -1634,3 +1634,289 @@ export function createParachuteModel(): THREE.Group {
 
   return root;
 }
+
+/**
+ * Procedural 3D Tactical Loot Crate
+ * High-detail composite military crate (8+ parts) with metallic latches,
+ * corner bumpers, stencil stripes, and tier-colored glowing lock beacon.
+ */
+export function createLootCrateMesh(
+  type: 'tactical_box' | 'air_drop' | 'military_locker' = 'tactical_box',
+  tier: 'common' | 'rare' | 'epic' | 'legendary' = 'rare'
+): THREE.Group {
+  const root = new THREE.Group();
+
+  const tierColors: Record<string, number> = {
+    common: 0x94a3b8, // Slate Silver
+    rare: 0x38bdf8,   // Cyan
+    epic: 0xa855f7,   // Purple
+    legendary: 0xf59e0b, // Gold Amber
+  };
+  const glowColor = tierColors[tier] || 0xf59e0b;
+
+  const crateMat = new THREE.MeshStandardMaterial({
+    color: type === 'air_drop' ? 0x991b1b : type === 'military_locker' ? 0x1e293b : 0x2e3c28,
+    roughness: 0.7,
+    metalness: 0.35,
+  });
+
+  const metalTrimMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    roughness: 0.4,
+    metalness: 0.85,
+  });
+
+  const beaconMat = new THREE.MeshBasicMaterial({
+    color: glowColor,
+  });
+
+  if (type === 'air_drop') {
+    // Air-drop supply container (1.8m x 1.8m x 1.4m)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.4, 1.8), crateMat);
+    body.position.y = 0.7;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    root.add(body);
+
+    // Pallet base
+    const pallet = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.2, 2.0), metalTrimMat);
+    pallet.position.y = 0.1;
+    pallet.castShadow = true;
+    root.add(pallet);
+
+    // Yellow hazard straps
+    const strapMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.5 });
+    const strapX = new THREE.Mesh(new THREE.BoxGeometry(1.82, 0.1, 0.1), strapMat);
+    strapX.position.set(0, 0.7, 0.91);
+    root.add(strapX);
+
+    // Smoke Flare Beacon on top
+    const flareCan = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.4, 8), metalTrimMat);
+    flareCan.position.set(0, 1.6, 0);
+    root.add(flareCan);
+
+    const flareGlow = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), beaconMat);
+    flareGlow.position.set(0, 1.82, 0);
+    root.add(flareGlow);
+  } else {
+    // Standard Tactical Weapon Case (1.4m x 0.5m x 0.8m)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.45, 0.8), crateMat);
+    body.position.y = 0.25;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    root.add(body);
+
+    // Lid Rim
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(1.44, 0.1, 0.84), metalTrimMat);
+    lid.position.y = 0.48;
+    root.add(lid);
+
+    // Corner Protectors (4x)
+    const cornerGeo = new THREE.BoxGeometry(0.12, 0.5, 0.12);
+    [
+      [-0.68, -0.38],
+      [0.68, -0.38],
+      [-0.68, 0.38],
+      [0.68, 0.38],
+    ].forEach(([cx, cz]) => {
+      const corner = new THREE.Mesh(cornerGeo, metalTrimMat);
+      corner.position.set(cx, 0.26, cz);
+      root.add(corner);
+    });
+
+    // Dual front latches
+    const latchGeo = new THREE.BoxGeometry(0.12, 0.16, 0.04);
+    const latch1 = new THREE.Mesh(latchGeo, metalTrimMat);
+    latch1.position.set(-0.35, 0.35, 0.41);
+    root.add(latch1);
+    const latch2 = new THREE.Mesh(latchGeo, metalTrimMat);
+    latch2.position.set(0.35, 0.35, 0.41);
+    root.add(latch2);
+
+    // Central Glowing Status Indicator (Shows Rarity Tier)
+    const beacon = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.03), beaconMat);
+    beacon.position.set(0, 0.36, 0.41);
+    root.add(beacon);
+  }
+
+  // Soft Ground Contact Shadow
+  const shadowGeo = new THREE.PlaneGeometry(2.0, 1.4);
+  const shadowMat = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false,
+  });
+  const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = 0.01;
+  root.add(shadow);
+
+  return root;
+}
+
+/**
+ * Procedural Collapsed Ground Parachute
+ * Draped canopy fabric resting flush on terrain after touchdown cutaway.
+ */
+export function createCollapsedParachuteModel(): THREE.Group {
+  const root = new THREE.Group();
+
+  const fabricMat = new THREE.MeshStandardMaterial({
+    color: 0x475569, // Military Slate
+    roughness: 0.9,
+    metalness: 0.05,
+    side: THREE.DoubleSide,
+  });
+
+  // Flat wrinkled fabric mound
+  const mound = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.8, 2.8, 0.22, 10),
+    fabricMat
+  );
+  mound.position.y = 0.11;
+  mound.rotation.y = Math.PI / 4;
+  mound.castShadow = true;
+  root.add(mound);
+
+  // Folded pleats
+  const pleatGeo = new THREE.CylinderGeometry(0.3, 0.5, 2.2, 6);
+  for (let i = 0; i < 3; i++) {
+    const pleat = new THREE.Mesh(pleatGeo, fabricMat);
+    pleat.rotation.z = Math.PI / 2;
+    pleat.rotation.y = (i * Math.PI) / 3;
+    pleat.position.set((i - 1) * 0.4, 0.16, 0);
+    root.add(pleat);
+  }
+
+  // Tapered cut cords
+  const cordMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
+  for (let i = 0; i < 4; i++) {
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0.05, 0),
+      new THREE.Vector3(Math.cos(i) * 2.2, 0.02, Math.sin(i) * 2.2),
+    ]);
+    root.add(new THREE.Line(lineGeo, cordMat));
+  }
+
+  return root;
+}
+
+/**
+ * Procedural Military Tactical Recon Buggy / Technical
+ * Composite 10-part vehicular model with chunky all-terrain tires,
+ * tubular steel roll-cage, headlights, hood, and rear supply bed.
+ */
+export function createTacticalBuggyModel(): THREE.Group {
+  const root = new THREE.Group();
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xb45309, // Desert Tan / Amber Brown
+    roughness: 0.6,
+    metalness: 0.4,
+  });
+
+  const frameMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b, // Dark Carbon Steel
+    roughness: 0.35,
+    metalness: 0.85,
+  });
+
+  const tireMat = new THREE.MeshStandardMaterial({
+    color: 0x0f172a, // Charcoal Rubber
+    roughness: 0.9,
+    metalness: 0.1,
+  });
+
+  const headlightMat = new THREE.MeshBasicMaterial({
+    color: 0xfef08a, // Warm Yellow Beam
+  });
+
+  // 1. Lower Chassis
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.35, 4.4), bodyMat);
+  chassis.position.y = 0.65;
+  chassis.castShadow = true;
+  root.add(chassis);
+
+  // 2. Hood / Engine Bay
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.4, 1.6), bodyMat);
+  hood.position.set(0, 0.95, -1.2);
+  hood.castShadow = true;
+  root.add(hood);
+
+  // 3. Cabin Floor & Seats
+  const seatMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8 });
+  const seat1 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.7), seatMat);
+  seat1.position.set(-0.55, 1.1, 0.2);
+  root.add(seat1);
+  const seat2 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.7), seatMat);
+  seat2.position.set(0.55, 1.1, 0.2);
+  root.add(seat2);
+
+  // 4. Steering Wheel
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.04, 6, 12), frameMat);
+  wheel.position.set(-0.55, 1.25, -0.3);
+  wheel.rotation.x = Math.PI / 4;
+  root.add(wheel);
+
+  // 5. Tubular Roll-Cage Bars
+  const rollBar1 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 8), frameMat);
+  rollBar1.position.set(-1.0, 1.5, -0.4);
+  root.add(rollBar1);
+  const rollBar2 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 8), frameMat);
+  rollBar2.position.set(1.0, 1.5, -0.4);
+  root.add(rollBar2);
+  const rollBar3 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 8), frameMat);
+  rollBar3.position.set(-1.0, 1.5, 1.0);
+  root.add(rollBar3);
+  const rollBar4 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 8), frameMat);
+  rollBar4.position.set(1.0, 1.5, 1.0);
+  root.add(rollBar4);
+
+  // Roll-Cage Roof Rail
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.06, 1.5), frameMat);
+  roof.position.set(0, 2.2, 0.3);
+  root.add(roof);
+
+  // 6. 4x All-Terrain Wheels
+  const wheelGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.38, 14);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const wheelPositions = [
+    [-1.25, 0.48, -1.4],
+    [1.25, 0.48, -1.4],
+    [-1.25, 0.48, 1.4],
+    [1.25, 0.48, 1.4],
+  ];
+  wheelPositions.forEach(([wx, wy, wz]) => {
+    const tire = new THREE.Mesh(wheelGeo, tireMat);
+    tire.position.set(wx, wy, wz);
+    tire.castShadow = true;
+    root.add(tire);
+
+    // Rim Hubcap
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.4, 8), frameMat);
+    rim.rotation.z = Math.PI / 2;
+    rim.position.set(wx, wy, wz);
+    root.add(rim);
+  });
+
+  // 7. Dual Headlights
+  const lightL = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), headlightMat);
+  lightL.position.set(-0.75, 0.95, -2.05);
+  root.add(lightL);
+  const lightR = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), headlightMat);
+  lightR.position.set(0.75, 0.95, -2.05);
+  root.add(lightR);
+
+  // 8. Rear Bumper & Antenna
+  const rearBumper = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.2, 0.2), frameMat);
+  rearBumper.position.set(0, 0.6, 2.25);
+  root.add(rearBumper);
+
+  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.6, 4), frameMat);
+  antenna.position.set(-1.0, 1.6, 2.1);
+  root.add(antenna);
+
+  return root;
+}
+
