@@ -1,3 +1,16 @@
+export interface TacticalSimulationState {
+  weather: 'clear' | 'dust_storm' | 'rain' | 'night';
+  visibilityKm: number;
+  suppression: number;
+  threatLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  routeRisk: number;
+  firefightPressure: number;
+  friendlyCasualtyEstimate: number;
+  enemyCasualtyEstimate: number;
+  timeOnTarget: number;
+  tacticalScore: number;
+}
+
 export type WarTheaterId = 'sanaa' | 'mandeeb' | 'hadramaut' | 'snow' | 'forest';
 
 export interface WarTheaterConfig {
@@ -163,6 +176,7 @@ export interface PlayerState {
   medkits?: number;
   armorPlates?: number;
   isDescentMode?: boolean;
+  tacticalSimulation?: TacticalSimulationState;
 }
 
 export interface BossState {
